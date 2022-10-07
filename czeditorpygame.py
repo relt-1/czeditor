@@ -212,33 +212,58 @@ class Window():
                b64encode(str(self.animationlength).encode("ascii")).decode("ascii")+","+\
                b64encode(str(self.origin).encode("ascii")).decode("ascii")
 
-def ImageKeyframeAction():
-    frames,cachestr,returnimg,last,success,notimportant = checkcache(startframe+i)
-    if last.frame > startframe:
-        #print(last.frame)
-        return
-    if last.window.animationlength*60 < i:
-        return
-    if not success:
-        fillcache(returnimg,frames,cachestr,startframe+i)
-    cachevisualizationdict[startframe+i] = ((startframe*913)%255,(startframe*701)%255,(startframe*863)%255)
+def getkeyframeswhosedatais(param,value):
+    global keyframes
+    returnids = []
+    i = 0
+    for keyframe in keyframes:
+        if param in keyframe.data:
+            if keyframe.data[param] == value:
+                returnids.append(i)
+        i += 1
+    return returnids
+
+def getkeyframeswhoseprivatedatais(param,value):
+    global keyframes
+    returnids = []
+    i = 0
+    for keyframe in keyframes:
+        if param in keyframe.privatedata:
+            if keyframe.privatedata[param] == value:
+                returnids.append(i)
+        i += 1
+    return returnids
+
+def getkeyframeswhosedatacontains(param,value):
+    global keyframes
+    returnids = []
+    i = 0
+    for keyframe in keyframes:
+        if param in keyframe.data:
+            if value in keyframe.data[param]:
+                returnids.append(i)
+        i += 1
+    return returnids
 
 class Keyframe():
-    def __init__(self,frame,x,y,window,align,keyframetype="error",data=[]):
-        #global framecache
+    def __init__(self,frame,x,y,window,align,keyframetype="error",data={},privatedata={}):
         global currentdirection
         global keyframeview
         global keyframes
         self.window = window.copy()
         self.type = keyframetype
-        self.data = data
+        self.data = data.copy()
         if self.type == "remove":
-            if not self.data:
-                self.data = keyframeview.selected
+            if "remove" not in data:
+                self.data["remove"] = [keyframes[i].frame for i in keyframeview.selected]
+                #print(keyframeview.selected)
+                removedframes = keyframeview.selected
+            else:
+                removedframes = getkeyframeswhoseframesare(self.data["remove"])
             self.window.animationlength = 0.01666666
-            for i in self.data:
+            for i in removedframes:
                 self.window.animationlength = max(self.window.animationlength,keyframes[i].window.animationcloselength)
-                keyframes[i].getclosedby = keyframes.index(self)
+                keyframes[i].privatedata["getclosedby"] = frame
         self.windowinactive = window.copy()
         self.windowinactive.active = False
         self.frame = frame
@@ -248,20 +273,12 @@ class Keyframe():
         self.align = align
         self.close = False
         self.closeframe = 0
-        self.getclosedby = None
-        #self.pos = (x,y)
-        #currentframe = Image.new("RGBA",(1280,720))
-        #for i in framecache:
-        #    #print(frame,i)
-        #    if i>frame:
-        #        break
-        #    currentframe = framecache[i]
-        #currentframe = currentframe.copy()
-        #currentframe.alpha_composite(self.window.image(),(self.x,self.y))
-        #framecache[self.frame] = currentframe.copy()
+        self.privatedata = privatedata.copy()
+        if "getclosedby" not in privatedata:
+            self.privatedata["getclosedby"] = None
     def __str__(self):
         global keyframeview
-        return str(self.window)+","+str(self.x)+","+str(self.y)+","+self.align+(","+str(max(0,min(int(self.window.animationlength*60),round(keyframeview.cursor*60)-self.frame))) if self.window.cancomposite else "")+","+(str(self.close)+","+str(max(0,min(int(self.window.animationcloselength*60),frame-self.closeframe))) if self.window.cancomposite else "")+","+str(self.type)+","+str(self.data)
+        return str(self.window)+","+str(self.x)+","+str(self.y)+","+self.align+","+str(self.frame)+","+str(self.close)+","+str(self.closeframe)+","+str(self.type)+","+str(self.data)
     def strframe(self,frame):
         return str(self.window)+","+str(self.x)+","+str(self.y)+","+self.align+(","+str(max(0,min(int(self.window.animationlength*60),frame-self.frame))) if self.window.cancomposite else "")+","+str(self.close)+","+(str(max(0,min(int(self.window.animationcloselength*60),frame-self.closeframe))) if self.window.cancomposite else "")+","+str(self.type)+","+str(self.data)
 def frametosavestr(frame):
@@ -441,7 +458,7 @@ class Keyframeview():
             self.active = None
             self.selected = []
         clickpos = self.gettime(event.x)
-        print(event)
+        #print(event)
         self.cursor = clickpos
         if temposnap.get() == 1:
             self.cursor = round(clickpos*int(tempovalue.get())/60*4)/int(tempovalue.get())*60/4
@@ -541,7 +558,7 @@ class Keyframeview():
         if temposnap.get() == 1:
             mult = 15/int(tempovalue.get())
             curbeat = round(self.cursor/mult)+value
-            print(curbeat)
+           # print(curbeat)
             self.cursor = round(curbeat*mult*60)/60
         else:
             self.cursor = round(60*self.cursor+value)/60
@@ -549,7 +566,7 @@ class Keyframeview():
         global tempovalue
         global temposnap
         if self.m1pressed and self.holdingframe is not None:
-            clickpos = self.gettime(event.x)
+            clickpos = round(self.gettime(event.x)*60)/60
             self.movingcursor = True
             if temposnap.get() == 1:
                 self.movedpos = round(clickpos*int(tempovalue.get())/15)/int(tempovalue.get())*15*60
@@ -574,14 +591,13 @@ class Keyframeview():
                 if i not in self.selected:
                     self.selected.append(i)
             else:
-                if i not in self.selected:
-                    self.selected = [i]
+                self.selected = [i]
     def getkeyframeundercursor(self,pos):
         global keyframes
         if abs(pos.y-25)<5:
             for i in range(len(keyframes)):
                 if abs(self.getcoord(keyframes[i].frame/60)-pos.x)<5:
-                    print(i)
+                    #print(i)
                     return i
 def getnextkeyframe(startframe):
     global keyframes
@@ -693,9 +709,9 @@ def playback():
                    # print(pygame.mouse.get_pressed(num_buttons=3))
                     createkeyframe(pygame.mouse.get_pos()[0],pygame.mouse.get_pos()[1])
                     updatekeyframeview()
-                elif event.type == 1027:
+                elif event.type == 1027: #scroll
                     cascade(event.y)
-                elif event.type == 768:
+                elif event.type == 768: #keyboard
                     keyboard(event.scancode)
                 #else:
                 #    print(event)
@@ -738,7 +754,7 @@ def keyboard(event):
         updatekeyframeview()
 def keyboardtk(event):
     global holdingshift
-    print(event.keycode)
+    #print(event.keycode)
     if event.keycode == 16:
         holdingshift = True
     elif event.keycode == 46: #delete
@@ -760,7 +776,7 @@ def keyboardrelease(event):
     if event.keycode == 16:
         holdingshift = False
 
-def createkeyframeparam(frame,x,y,window,align,keyframetype,data):
+def createkeyframeparam(frame,x,y,window,align,keyframetype,data,privatedata):
     global keyframeview
     global keyframes
     global selected
@@ -778,11 +794,13 @@ def createkeyframeparam(frame,x,y,window,align,keyframetype,data):
         if(keyframes[lastgoodi].frame != frame):
             #print(lastgoodi,keyframes[lastgoodi].frame,frame)
             lastgoodi += 1
-            keyframes.insert(lastgoodi,Keyframe(frame,x,y,window,align,keyframetype,data))
+            keyframes.insert(lastgoodi,Keyframe(frame,x,y,window,align,keyframetype,data,privatedata))
         else:
-            keyframes[lastgoodi] = Keyframe(frame,x,y,window,align,keyframetype,data)
+            keyframes[lastgoodi] = Keyframe(frame,x,y,window,align,keyframetype,data,privatedata)
+        return lastgoodi
     else:
-        keyframes.append(Keyframe(frame,x,y,window,align,keyframetype,data))
+        keyframes.append(Keyframe(frame,x,y,window,align,keyframetype,data,privatedata))
+        return len(keyframes)-1
     #cachestart(frame)
     #print([i.frame for i in keyframes])
 
@@ -796,7 +814,8 @@ def deletekeyframeparam(frame):
             cachestart(frame)
             break
 cascading = 0
-def createkeyframe(x,y,keyframetype="error",data=[]):
+
+def createkeyframe(x,y,keyframetype="error",data={}):
     global keyframeview
     global keyframes
     global selected
@@ -832,13 +851,18 @@ def createkeyframe(x,y,keyframetype="error",data=[]):
             lastgoodi += 1
             keyframes.insert(lastgoodi,Keyframe(frame,event.x,event.y,chosenwindow,currentdirection,keyframetype,data))
             keyframeview.active = lastgoodi
+            keyframeview.selected = [lastgoodi]
         else:
             keyframes[lastgoodi] = Keyframe(frame,event.x,event.y,chosenwindow,currentdirection,keyframetype,data)
             keyframeview.active = lastgoodi
+            keyframeview.selected = [lastgoodi]
             #curframes[lastgoodi] = Keyframe(frame,event.x,event.y,chosenwindow)
+        #print("== ADDING:",str(keyframes[lastgoodi]))
     else:
         keyframes.append(Keyframe(frame,event.x,event.y,chosenwindow,currentdirection,keyframetype,data))
         keyframeview.active = len(keyframes)-1
+        keyframeview.selected = [len(keyframes)-1]
+        #print("== ADDING:",str(keyframes[len(keyframes)-1]))
     cachestart(frame)
     #cacheframes(frame)
     #print([i.frame for i in keyframes])
@@ -1025,7 +1049,7 @@ def updatesound():
     global audiopath
     global markers
     global hertz
-    print(audiopath)
+    #print(audiopath)
     if audiopath:
         try:
             sound = AudioSegment.from_file(audiopath)
@@ -1056,35 +1080,35 @@ def cascade(y):
     else:
         cascading = max(0,cascading-1)
     cascadingvar.set(f"Cascading distance: {cascading}")
-
+def movekeyframe(keyframeid,delta):
+    global keyframes
+    if keyframes[keyframeid].type == "error":
+        copyframe = keyframes[keyframeid]
+        keyframes.pop(keyframeid)
+        theid = createkeyframeparam(copyframe.frame+delta,copyframe.x,copyframe.y,copyframe.window,copyframe.align,copyframe.type,copyframe.data,copyframe.privatedata)
+        theremoves = getkeyframeswhosedatacontains("remove",copyframe.frame)
+        for remove in theremoves:
+            keyframes[remove].data["remove"][keyframes[remove].data["remove"].index(copyframe.frame)] = copyframe.frame+delta
+    elif keyframes[keyframeid].type == "remove":
+        copyframe = keyframes[keyframeid]
+        keyframes.pop(keyframeid)
+        theid = createkeyframeparam(copyframe.frame+delta,copyframe.x,copyframe.y,copyframe.window,copyframe.align,copyframe.type,copyframe.data,copyframe.privatedata)
+        theremoves = getkeyframeswhoseprivatedatais("getclosedby",keyframeid)
+        for remove in theremoves:
+            keyframes[remove].privatedata["getclosedby"] = theid
+    
 def movekeyframes(keyframesmove,to):
     global keyframes
-    #print([i.frame for i in keyframes])
-    keyframesmove = keyframesmove.copy()
-    copy = keyframes.copy()
-    temp = []
-    #for i in keyframesmove:
-        #print(i)
-    #    deletekeyframeparam(copy[i].frame)
-    for i in range(len(keyframes)):
-        if i not in keyframesmove:
-            temp.append(keyframes[i])
-    keyframes = temp.copy()
-    #print(keyframesmove,[i.frame for i in keyframes])
+    keyframesmove = [keyframes[i] for i in keyframesmove]
     earliest = 99999999999
     print(keyframesmove)
-    cachelist = []
     for i in keyframesmove:
-        #print((copy[i].frame+to,copy[i].x,copy[i].y,copy[i].window))
-        earliest = min(earliest,copy[i].frame+to)
-        createkeyframeparam(copy[i].frame+to,copy[i].x,copy[i].y,copy[i].window,copy[i].align,copy[i].type,copy[i].data)
-        if copy[i].frame not in cachelist:
-            cachelist.append(copy[i].frame)
-        if copy[i].frame+to not in cachelist:
-            cachelist.append(copy[i].frame+to)
-    cachestart(cachelist)
+        keyframeid = keyframes.index(i)
+        earliest = min(earliest,keyframes[keyframeid].frame,keyframes[keyframeid].frame+to)
+        movekeyframe(keyframeid,to)
+    cachestart(earliest)
     
-    #print([i.frame for i in keyframes])
+    
 def updatewallpaper():
     global currentwallpaper
     global wallpaperpath
@@ -1104,44 +1128,33 @@ def updatewallpaper():
 def dontclose():
     return
 
-class Cachemarker:
-    def __init__(self,keyframe,frame):
-        self.keyframe = keyframe
-        self.frame = frame
 workersamount = 3
-#currentcachingframes = [Cachemarker(None,None)]*workersamount
 cacherefresh = False
 cachestartpos = []
 cacherunning = False
 framestocache = []
 def fillcache(startimg,fillin,fillstring,frame):
     global keyframecache
-   # print("start img",startimg)
     returnimg = startimg[0]
     stillinactive = startimg[1]
     lenerrors = len(fillin)-1
     i = 0
     time = frame/60
-   # print("returnimg1,",returnimg)
     if fillin:
         returnimg = startimg[1]
     for error in fillin:
         lenerrors = len(fillin)-1
-       # print("returnimg2,",returnimg)
         if i == lenerrors:
             if error.window.cancomposite:
                 if not error.close:
                     stillinactive = returnimg.copy()
-                    #print("before",returnimg,(error.x,error.y),time-error.start,error.align)
                     stillinactive = error.windowinactive.image(stillinactive,(error.x,error.y),time-error.start,error.align)
-                    #print("before2",returnimg,(error.x,error.y),time-error.start,error.align)
                     returnimg = error.window.image(returnimg,(error.x,error.y),time-error.start,error.align)
-                    #print("after",returnimg,(error.x,error.y),time-error.start,error.align)
                 else:
                     stillinactive = returnimg.copy()
                     stillinactive = error.windowinactive.image(stillinactive,(error.x,error.y),time-error.closeframe/60,error.align,True)
                     returnimg = error.window.image(returnimg,(error.x,error.y),time-error.closeframe/60,error.align,True)
-                    print(time-error.closeframe/60)
+                    #print(time-error.closeframe/60)
             else:
                 stillinactive = returnimg.copy()
                 temp = error.windowinactive.image()
@@ -1155,21 +1168,13 @@ def fillcache(startimg,fillin,fillstring,frame):
                 returnimg = error.windowinactive.image(returnimg,(error.x,error.y),time-error.closeframe/60,error.align,True)
             else:
                 returnimg = error.windowinactive.image(returnimg,(error.x,error.y),time-error.start,error.align)
-            #print("compositing")
-            
         else:
             temp = error.windowinactive.image()
             returnimg.alpha_composite(temp,getalignedpos((error.x,error.y),error.align,temp.size))
         i += 1
-    #print("returnimg3,",returnimg)
-    #print("saving",fillstring)
     if len(keyframecache) > 500:
-        #keyframecache[list(keyframecache.keys())[0]][2].save("cache/cache
         del keyframecache[list(keyframecache.keys())[0]]
     global keyframeview
-    #returnimg.save(f"dump/{frame}.png")
-   #print(f"doing frame {frame},  i: {i}, lenerrors: {lenerrors}")
-    #print(returnimg)
     keyframecache[fillstring] = [pygame.image.fromstring(returnimg.tobytes(), returnimg.size, returnimg.mode).convert(),returnimg,stillinactive]
     filledframes[frame] = True
 class Emptylast():
@@ -1187,11 +1192,20 @@ def errorgetcache(frame,appended,timekeyframes,returnimg,lastcalculatedkeyframes
     else:
         timekeyframes.append(keyframe)
     return appended,success,returnimg
-
+def getkeyframeswhoseframesare(frame):
+    global keyframes
+    theframes = []
+    i = 0
+    for keyframe in keyframes:
+        if keyframe.frame in frame:
+            theframes.append(i)
+        i += 1
+    return theframes
 def removegetcache(frame,appended,timekeyframes,returnimg,lastcalculatedkeyframes,keyframesstr,keyframe):
     global keyframecache
     lastcalculatedkeyframes = []
-    for remove in keyframe.data:
+    removedkeyframes = getkeyframeswhoseframesare(keyframe.data["remove"])
+    for remove in removedkeyframes:
         if keyframes[remove] in timekeyframes:
             ind = timekeyframes.index(keyframes[remove])
             if frame-keyframe.frame >= keyframe.window.animationlength*60:
@@ -1253,67 +1267,8 @@ def checkcache(frame):
             if keyframe.frame > frame:
                 break
             appended,success,returnimg = keyframecachetypes[keyframe.type](frame,appended,timekeyframes,returnimg,lastcalculatedkeyframes,keyframesstr,keyframe)
-            """if keyframe.remove:
-                lastcalculatedkeyframes = []
-                for remove in keyframe.remove:
-                    if keyframes[remove] in timekeyframes:
-                        timekeyframes.pop(timekeyframes.index(keyframes[remove]))
-                keyframesstr = wallpaperpath
-                appended = wallpaperpath
-                for timekeyframe in timekeyframes:
-                    appended = keyframesstr+","+timekeyframe.strframe(frame)
-                    keyframesstr = appended
-                success = False
-                #print("DICTIONARY: ")
-                #print("\n".join(keyframecache.keys()))
-                #print("WANTED: ")
-               # print(appended)
-                if appended in keyframecache:
-                    lastcalculatedkeyframes = timekeyframes.copy()
-                    returnimg = keyframecache[appended]
-                    success = True
-                else:
-                    #print("its not")
-                    newcalculatedkeyframes = []
-                    refillkeyframes = []
-                    theappend = wallpaperpath
-                    successappend = wallpaperpath
-                    returnimg = [pygame.image.fromstring(currentwallpaper.tobytes(), currentwallpaper.size, currentwallpaper.mode).convert(),currentwallpaper.copy(),currentwallpaper.copy()]
-                    for refillframe in timekeyframes:
-                        theappend = theappend+","+refillframe.strframe(frame)
-                        refillkeyframes.append(refillframe)
-                        if theappend in keyframecache:
-                            newcalculatedkeyframes = refillkeyframes.copy()
-                            successappend = theappend
-                    if successappend in keyframecache:
-                        returnimg = keyframecache[successappend]
-                    lastcalculatedkeyframes = newcalculatedkeyframes
-                keyframesstr = appended
-                last = keyframe
-            else:
-                appended = keyframesstr+","+keyframe.strframe(frame)
-                success = False
-                #print("DICTIONARY: ")
-                #print("\n".join(keyframecache.keys()))
-                #print("WANTED: ")
-               # print(appended)
-                if appended in keyframecache:
-                    timekeyframes.append(keyframe)
-                    lastcalculatedkeyframes = timekeyframes.copy()
-                    returnimg = keyframecache[appended]
-                    success = True
-                    #print("ITS IN!")
-                else:
-                    #print("its not")
-                    timekeyframes.append(keyframe)
-                keyframesstr = appended
-                last = keyframe"""
             keyframesstr = appended
             last = keyframe
-        #print(len(lastcalculatedkeyframes))
-        #returnimg = returnimg.copy()
-        #print(returnimg)
-        #print(timekeyframes[len(lastcalculatedkeyframes):],keyframesstr,[returnimg[2].copy(),returnimg[3].copy()],last,success,returnimg[:2])
         return timekeyframes[len(lastcalculatedkeyframes):],keyframesstr,[returnimg[1].copy(),returnimg[2].copy()],last,success,returnimg[:1]
     except Exception as e:
         print("ERROR in checkcache():",e)
@@ -1376,11 +1331,7 @@ def optimizecache():
         nextkeyframe = None
     allstr = []
     while doing:
-        keyframesstr = ""
-        for keyframe in keyframes:
-            if keyframe.frame > theframe:
-                break
-            keyframesstr = keyframesstr+","+keyframe.strframe(theframe)
+        keyframesstr = checkcache(theframe)[1]
         allstr.append(keyframesstr)
         theframe+=1
         
@@ -1463,7 +1414,6 @@ def cacheframesmanager():
     global closed
     global cachestartpos
     while not closed:
-        
         if cacherunning:
             if cacherefresh:
                 print("cacheframesmanager() got cache:",cachestartpos)
