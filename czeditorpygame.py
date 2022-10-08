@@ -121,7 +121,8 @@ def Composite7(img,GlassMask,time,startpos,startrotation,origin,wallpaper,pos,al
     return wallpaper
     
 composites = {"xp": (lambda img,mask,time,startpos,startrotation,origin,wallpaper,pos,align: ExecuteCustomWindowAnimation(img,CreateCustomWindowAnimation(img,time,startpos,startrotation,origin),time,wallpaper,pos,align)),
-              "7": (lambda img,mask,time,startpos,startrotation,origin,wallpaper,pos,align: Composite7(img,mask,time,startpos,startrotation,origin,wallpaper,pos,align))}
+              "7": (lambda img,mask,time,startpos,startrotation,origin,wallpaper,pos,align: Composite7(img,mask,time,startpos,startrotation,origin,wallpaper,pos,align)),
+              "custom": (lambda img,mask,time,startpos,startrotation,origin,wallpaper,pos,align: ExecuteCustomWindowAnimation(img,CreateCustomWindowAnimation(img,time,startpos,startrotation,origin),time,wallpaper,pos,align))}
 
 def CompositeWindow(img,mask,os,time,startpos,startrotation,origin,wallpaper,pos,align,close,closetime,endpos,endrotation,endorigin,closetimingfunction,timingfunction):
     global composites
@@ -254,7 +255,6 @@ class Window():
             return self.__getimage(composite,pos,time,align,close,generated[self.os][self.hashstring])[0]
         return generated[self.os][self.hashstring][0]
     def copy(self):
-        print("copying",self.closetimingfunction)
         return Window(self.os,self.text,self.subtext,self.icon,self.title,self.buttons,self.buttonstyles,self.buttondefaults,self.bar,self.closebutton,self.active,self.collapsed,img=self.imgstr,startpos=self.startpos,animate=self.animate,startrotation=self.startrotation,animationlength=self.animationlength,origin=self.origin,animationcloselength=self.animationcloselength,timingfunction=self.timingfunction,endpos=self.endpos,endrotation=self.endrotation,endorigin=self.endorigin,closetimingfunction=self.closetimingfunction)
     def __str__(self):
         return self.hashstring
@@ -425,24 +425,40 @@ def savestrtowindow(savestr):
     notcustom.imgstr = b64decode(array[12].encode("ascii")).decode("ascii")
     if notcustom.imgstr:
         notcustom.img = Image.open(notcustom.imgstr)
-    notcustom.startpos = tuple(stringtolist(b64decode(array[13].encode("ascii")).decode("ascii")))
-    notcustom.animate = stringtobool(b64decode(array[14].encode("ascii")).decode("ascii"))
-    notcustom.startrotation = tuple(stringtolist(b64decode(array[15].encode("ascii")).decode("ascii")))
-    notcustom.animationlength = float(b64decode(array[16].encode("ascii")).decode("ascii"))
-    notcustom.origin = tuple(stringtolist(b64decode(array[17].encode("ascii")).decode("ascii")))
-    notcustom.endpos = tuple(stringtolist(b64decode(array[18].encode("ascii")).decode("ascii")))
-    notcustom.endrotation = tuple(stringtolist(b64decode(array[19].encode("ascii")).decode("ascii")))
-    notcustom.endorigin = tuple(stringtolist(b64decode(array[20].encode("ascii")).decode("ascii")))
-    notcustom.animationcloselength = float(b64decode(array[21].encode("ascii")).decode("ascii"))
-    notcustom.timingfunction = timingfunctions[b64decode(array[22].encode("ascii")).decode("ascii")]
-    notcustom.closetimingfunction = timingfunctions[b64decode(array[23].encode("ascii")).decode("ascii")]
+    if len(array)==18:
+        if notcustom.os == "custom":
+            notcustom.startpos = tuple(stringtolist(b64decode(array[13].encode("ascii")).decode("ascii")))
+            notcustom.animate = stringtobool(b64decode(array[14].encode("ascii")).decode("ascii"))
+            notcustom.startrotation = tuple(stringtolist(b64decode(array[15].encode("ascii")).decode("ascii")))
+            notcustom.animationlength = float(b64decode(array[16].encode("ascii")).decode("ascii"))
+            notcustom.origin = tuple(stringtolist(b64decode(array[17].encode("ascii")).decode("ascii")))
+        elif notcustom.os == "7":
+            notcustom.startpos = (0,-0.017,0.1)
+            notcustom.animate = True
+            notcustom.startrotation = (5,0,0)
+            notcustom.origin = (0,1,0)
+            notcustom.animationlength = 0.25
+    else:
+        notcustom.startpos = tuple(stringtolist(b64decode(array[13].encode("ascii")).decode("ascii")))
+        notcustom.animate = stringtobool(b64decode(array[14].encode("ascii")).decode("ascii"))
+        notcustom.startrotation = tuple(stringtolist(b64decode(array[15].encode("ascii")).decode("ascii")))
+        notcustom.animationlength = float(b64decode(array[16].encode("ascii")).decode("ascii"))
+        notcustom.origin = tuple(stringtolist(b64decode(array[17].encode("ascii")).decode("ascii")))
+        notcustom.endpos = tuple(stringtolist(b64decode(array[18].encode("ascii")).decode("ascii")))
+        notcustom.endrotation = tuple(stringtolist(b64decode(array[19].encode("ascii")).decode("ascii")))
+        notcustom.endorigin = tuple(stringtolist(b64decode(array[20].encode("ascii")).decode("ascii")))
+        notcustom.animationcloselength = float(b64decode(array[21].encode("ascii")).decode("ascii"))
+        notcustom.timingfunction = timingfunctions[b64decode(array[22].encode("ascii")).decode("ascii")]
+        notcustom.closetimingfunction = timingfunctions[b64decode(array[23].encode("ascii")).decode("ascii")]
     return notcustom
 #print(stringtolist(str([["hi",2,True],True,5,"hello"])))
 def savestrtoframe(savestr):
     array = savestr.split("|")
     #frame,x,y,window,align,keyframetype="error",data={}
-    thedata = stringtolist(array[6])
-    return Keyframe(int(array[1]),int(array[2]),int(array[3]),savestrtowindow(array[0]),array[4],array[5],{i:j for i,j in thedata})
+    if len(array) == 7:
+        thedata = stringtolist(array[6])
+        return Keyframe(int(array[1]),int(array[2]),int(array[3]),savestrtowindow(array[0]),array[4],array[5],{i:j for i,j in thedata})
+    return Keyframe(int(array[1]),int(array[2]),int(array[3]),savestrtowindow(array[0]),array[4])
 def savekeyframes(path):
     global keyframes
     global audiopath
@@ -795,8 +811,8 @@ def playback():
             
             
             #print("douing")
-    except Exception as e:
-        print("PYGAME ERROR:",e)
+    except Exception:
+        print("PYGAME ERROR:",sys.exc_info()[0](traceback.format_exc()))
     print("end pygame")
     
 
