@@ -1,6 +1,6 @@
 from tkinter import *
 import tkinter.font as tkfont
-from PIL import ImageTk, Image, ImageDraw, ImageChops
+from PIL import ImageTk, Image, ImageDraw, ImageChops, ImageFilter
 import time
 from generate import *
 from pydub import AudioSegment
@@ -18,6 +18,9 @@ import wavfile
 import copy
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+import sys
+import traceback
+from math import pi
 globalcache = {}
 framecache = {}
 keyframecache = {}
@@ -25,6 +28,25 @@ filledframes = {}
 openedimages = {}
 generated = {"xp":{},"ubuntu":{},"95":{},"macwindow":{},"7":{},"custom":{}}
 emptyimg = Image.new("RGBA",(100,100),(255,0,255))
+
+def win7bezierapprox(x):
+    return 1.08334*x**0.817775-0.0822632*x**1.48583
+
+def win7bezierapproxclose(x):
+    return 0.922396*x**1.234158+0.0768603*x**11.3377
+
+def linear(x):
+    return x
+
+def cubiceaseout(x):
+    return 1-(1-x)**3
+
+def smooth(x):
+    return 3*x**2-2*x**3
+
+def easeout(x):
+    return -x*(x-2)
+
 
 def openimage(s):
     if s in openedimages:
@@ -37,10 +59,10 @@ def find_coeffs(pa, pb):
         matrix.append([p1[0], p1[1], 1, 0, 0, 0, -p2[0]*p1[0], -p2[0]*p1[1]])
         matrix.append([0, 0, 0, p1[0], p1[1], 1, -p2[1]*p1[0], -p2[1]*p1[1]])
 
-    A = np.matrix(matrix, dtype=numpy.float)
+    A = np.matrix(matrix, dtype=np.float)
     B = np.array(pb).reshape(8)
 
-    res = np.dot(numpy.linalg.inv(A.T * A) * A.T, B)
+    res = np.dot(np.linalg.inv(A.T * A) * A.T, B)
     return np.array(res).reshape(8)
 
 def rotate(vec,angles):
@@ -51,84 +73,122 @@ def rotate(vec,angles):
     #print(vec)
     return rot.apply(vec)
 
+
 def translaterotateproject(width,height,position,rotation,origin,corner,perspective=250):
     vec = np.array((width*corner[0]-(width*origin[0])/2,height*corner[1]-(height*origin[1])/2,0))
     rotated = rotate(vec,rotation)
     z = 1+rotated[2]/perspective+position[2]
     projected = [(rotated[0]-width*(0.5-origin[0]/2))/z+width/2+position[0],(rotated[1]-height*(0.5-origin[1]/2))/z+height/2+position[1]]
     return projected
-def CreateCustomWindowAnimation(image,time=1,startpos=(0,0,0),startrotation=(0,0,0),origin=(0.5,0.5,0),wallpaper=None,pos=None,align=None,close=False):
+
+
+
+def CreateCustomWindowAnimation(image,time=1,startpos=(0,0,0),startrotation=(0,0,0),origin=(0.5,0.5,0)):
     #print("theimage,",image)
     t = min(1,max(0,time))
-    if not close:
-        startrotation = np.array(startrotation)
-        startpos = np.array(startpos)
-        NW = translaterotateproject(w(image),h(image),startpos*(1-t),startrotation*(1-t),origin,(0,0,0))
-        NE = translaterotateproject(w(image),h(image),startpos*(1-t),startrotation*(1-t),origin,(1,0,0))
-        SW = translaterotateproject(w(image),h(image),startpos*(1-t),startrotation*(1-t),origin,(0,1,0))
-        SE = translaterotateproject(w(image),h(image),startpos*(1-t),startrotation*(1-t),origin,(1,1,0))
-        coeffs = find_coeffs([NW,NE,SE,SW],[[0,0],[w(image),0],[w(image),h(image)],[0,h(image)]])
-        image = image.transform(image.size, Image.PERSPECTIVE, coeffs,Image.LINEAR)
-        no = image.copy()
-        no.putalpha(0)
-        image = ImageChops.blend(no,image,t)
-        if wallpaper:
-            image = put(wallpaper.copy(),image.copy(),pos[0],pos[1],align)
-    else:
-        image = wallpaper.copy()
-    #print("daimage",image)
+    startrotation = np.array(startrotation)
+    startpos = np.array(startpos)
+    NW = translaterotateproject(w(image),h(image),startpos*(1-t),startrotation*(1-t),origin,(0,0,0))
+    NE = translaterotateproject(w(image),h(image),startpos*(1-t),startrotation*(1-t),origin,(1,0,0))
+    SW = translaterotateproject(w(image),h(image),startpos*(1-t),startrotation*(1-t),origin,(0,1,0))
+    SE = translaterotateproject(w(image),h(image),startpos*(1-t),startrotation*(1-t),origin,(1,1,0))
+    coeffs = find_coeffs([NW,NE,SE,SW],[[0,0],[w(image),0],[w(image),h(image)],[0,h(image)]])
+    return coeffs
+def ExecuteCustomWindowAnimation(image,coeffs,time,wallpaper=None,pos=None,align=None):
+    t = min(1,max(0,time))
+    image = image.transform(image.size, Image.PERSPECTIVE, coeffs,Image.LINEAR);
+    no = image.copy()
+    no.putalpha(0)
+    image = ImageChops.blend(no,image,t)
+    if wallpaper:
+        image = put(wallpaper.copy(),image.copy(),pos[0],pos[1],align)
     return image
 
+def Composite7(img,GlassMask,time,startpos,startrotation,origin,wallpaper,pos,align):
+    wallpaper = wallpaper.copy()
+    GlassImg = openimage("7/Glass.png")
+    WithBorder = put(Image.new("RGBA",(800,602),(0,0,0,0)),GlassImg.resize(wallpaper.size,0),int(-pos[0]+w(img)/16-wallpaper.size[0]/16+pos[0]/8),-pos[1])
+    GlassMask = put(Image.new("RGBA",img.size,(255,255,255,0)),GlassMask,14,14)
+    WithBorder = ImageChops.multiply(WithBorder,GlassMask)
+    IMAGE = put(WithBorder,img,0,0)
+    coeffs = CreateCustomWindowAnimation(IMAGE,time,startpos,startrotation,origin)
+    IMAGE = ExecuteCustomWindowAnimation(IMAGE,coeffs,time)
+    GlassMask = ExecuteCustomWindowAnimation(GlassMask,coeffs,time)
+    Blur = wallpaper.filter(ImageFilter.GaussianBlur(radius=12))
+    masked = ImageChops.multiply(put(Image.new("RGBA",wallpaper.size,(0,0,0,0)),GlassMask,pos[0]-14, pos[1]-14,align),Blur)
+    masked = put(masked,IMAGE,pos[0]-14,pos[1]-14,align)
+    wallpaper.alpha_composite(masked)
+    return wallpaper
+    
+composites = {"xp": (lambda img,mask,time,startpos,startrotation,origin,wallpaper,pos,align: ExecuteCustomWindowAnimation(img,CreateCustomWindowAnimation(img,time,startpos,startrotation,origin),time,wallpaper,pos,align)),
+              "7": (lambda img,mask,time,startpos,startrotation,origin,wallpaper,pos,align: Composite7(img,mask,time,startpos,startrotation,origin,wallpaper,pos,align))}
+
+def CompositeWindow(img,mask,os,time,startpos,startrotation,origin,wallpaper,pos,align,close,closetime,endpos,endrotation,endorigin,closetimingfunction,timingfunction):
+    global composites
+    if close:
+        time = 1-closetimingfunction(closetime)
+        return composites[os](img,mask,time,endpos,endrotation,endorigin,wallpaper,pos,align)
+    else:
+        time = timingfunction(time)
+        return composites[os](img,mask,time,startpos,startrotation,origin,wallpaper,pos,align)
 class Window():
-    def __getimage(self,composite = None,pos=(0,0),time=1,align="",close=False):
-        if self.os == "xp":
-            new = CreateXPWindow(0,0,
-                                      captiontext=self.title,
-                                      active=self.active,
-                                      erroriconpath=self.icons["xp"][self.icon],
-                                      errortext=self.text,
-                                      button1=self.buttons[0],
-                                      button2=self.buttons[1],
-                                      button3=self.buttons[2],
-                                      button1style=self.buttonstyles[0],
-                                      button2style=self.buttonstyles[1],
-                                      button3style=self.buttonstyles[2])
-        elif self.os == "macwindoid":
-            new = CreateMacWindoid(icon=self.icons["macwindoid"][self.icon],text=self.text,collapsed=self.collapsed)
-        elif self.os == "ubuntu":
-            new = CreateUbuntuWindow(icon=self.icons["ubuntu"][self.icon],bigtext=self.text,text=self.subtext,title=self.title,buttons=self.buttons,active=self.active)
-        elif self.os == "95":
-            new = Create95Window(icon=self.icons["95"][self.icon],text=self.text,title=self.title,buttons=self.buttons,active=self.active,closebutton=self.closebutton)
-        elif self.os == "macwindow":
-            new = CreateMacWindow(0,0,
-                                      title=self.title,
-                                      icon=self.icons["macwindow"][self.icon],
-                                      errortext=self.text,
-                                      button1=self.buttons[0],
-                                      button2=self.buttons[1],
-                                      button3=self.buttons[2],
-                                      button1style=self.buttonstyles[0],
-                                      button2style=self.buttonstyles[1],
-                                      button3style=self.buttonstyles[2],
-                                      button1default=self.buttondefaults[0],
-                                      button2default=self.buttondefaults[1],
-                                      button3default=self.buttondefaults[2])
-        elif self.os == "7":
-            temp = []
-            for i in range(len(self.buttons)):
-                if self.buttons[i] != "":
-                    temp.append([self.buttons[i],self.buttonstyles[i]])
-            new = Create7Window(icon=self.icons["7"][self.icon],text=self.text,title=self.title,buttons=temp,wallpaper=composite,pos=pos,active=self.active,time=time,align=align,close=close)
-        elif self.os == "custom":
-            if self.animate:
-                #print("the TIME",time)
-                new = CreateCustomWindowAnimation(self.img,time/self.animationlength,self.startpos,self.startrotation,self.origin,wallpaper=composite,pos=pos,align=align,close=close)
-            else:
-                new = self.img
+    def __getimage(self,composite=False,pos=(0,0),time=1,align="",close=False,generated=None):
+        mask = None
+        if generated is None:
+            if self.os == "xp":
+                new = CreateXPWindow(0,0,
+                                          captiontext=self.title,
+                                          active=self.active,
+                                          erroriconpath=self.icons["xp"][self.icon],
+                                          errortext=self.text,
+                                          button1=self.buttons[0],
+                                          button2=self.buttons[1],
+                                          button3=self.buttons[2],
+                                          button1style=self.buttonstyles[0],
+                                          button2style=self.buttonstyles[1],
+                                          button3style=self.buttonstyles[2])
+            elif self.os == "macwindoid":
+                new = CreateMacWindoid(icon=self.icons["macwindoid"][self.icon],text=self.text,collapsed=self.collapsed)
+            elif self.os == "ubuntu":
+                new = CreateUbuntuWindow(icon=self.icons["ubuntu"][self.icon],bigtext=self.text,text=self.subtext,title=self.title,buttons=self.buttons,active=self.active)
+            elif self.os == "95":
+                new = Create95Window(icon=self.icons["95"][self.icon],text=self.text,title=self.title,buttons=self.buttons,active=self.active,closebutton=self.closebutton)
+            elif self.os == "macwindow":
+                new = CreateMacWindow(0,0,
+                                          title=self.title,
+                                          icon=self.icons["macwindow"][self.icon],
+                                          errortext=self.text,
+                                          button1=self.buttons[0],
+                                          button2=self.buttons[1],
+                                          button3=self.buttons[2],
+                                          button1style=self.buttonstyles[0],
+                                          button2style=self.buttonstyles[1],
+                                          button3style=self.buttonstyles[2],
+                                          button1default=self.buttondefaults[0],
+                                          button2default=self.buttondefaults[1],
+                                          button3default=self.buttondefaults[2])
+            elif self.os == "7":
+                temp = []
+                for i in range(len(self.buttons)):
+                    if self.buttons[i] != "":
+                        temp.append([self.buttons[i],self.buttonstyles[i]])
+                new,mask = Create7Window(icon=self.icons["7"][self.icon],text=self.text,title=self.title,buttons=temp,active=self.active)
+            elif self.os == "custom":
+                 new = self.img
+        else:
+            new = generated[0].copy()
+            mask = generated[1].copy()
             #print("Animate",self.animate)
         #print("new",new)
-        return new
-    def __init__(self,os="xp",text="",subtext="",icon=0,title="",buttons=["","",""],buttonstyles=[0,0,0],buttondefaults=[False,False,False],bar=True,closebutton=True,active=True,collapsed=False,img="",startpos=(0,-0.017,0.1),animate=True,startrotation=(5,0,0),animationlength=0.25,origin=(0,0.5,0),animationcloselength=0.166666):
+        if mask is None:
+            mask = new.split()[-1]
+        #print("timingfucntion:")
+        #print(self.closetimingfunction)
+        if composite:
+            new = CompositeWindow(new,mask,self.os,time=min(1,max(0,(time+0.016666666)/max(0.01,self.animationlength))),startpos=self.startpos,startrotation=self.startrotation,origin=self.origin,wallpaper=composite,pos=pos,align=align,close=close,closetime=min(1,max(0,(time+0.01666666)/max(0.01,self.animationcloselength))),endpos=self.endpos,endrotation=self.endrotation,endorigin=self.endorigin,closetimingfunction=self.closetimingfunction,timingfunction=self.timingfunction)
+        #new = CreateCustomWindowAnimation(new,time/self.animationlength,self.startpos,self.startrotation,self.origin,wallpaper=composite,pos=pos,align=align,close=close)
+        return new,mask
+    def __init__(self,os="xp",text="",subtext="",icon=0,title="",buttons=["","",""],buttonstyles=[0,0,0],buttondefaults=[False,False,False],bar=True,closebutton=True,active=True,collapsed=False,img="",startpos=(0,0,0),animate=True,startrotation=(0,0,0),animationlength=0.016666666,origin=(0,0,0),animationcloselength=0.0166666666,timingfunction=win7bezierapprox,endpos=(0,0,0),endrotation=(0,0,0),endorigin=(0,0,0),closetimingfunction=win7bezierapproxclose):
         global emptyimg
         self.os = os
         self.active = active
@@ -180,16 +240,22 @@ class Window():
         self.animationcloselength = animationcloselength
         self.origin = origin
         self.hashstring = self.os+","+str(self.active)+","+self.text+","+self.subtext+","+str(self.icon)+","+self.title+","+str(self.buttons)+","+str(self.buttonstyles)+","+str(self.buttondefaults)+","+str(self.bar)+","+str(self.closebutton)+","+str(self.collapsed)+","+str(self.imgstr)
+        self.timingfunction = timingfunction
+        self.endpos=endpos
+        self.endrotation=endrotation
+        self.endorigin=endorigin
+        self.closetimingfunction=closetimingfunction
     def image(self,composite = None,pos=None,time=1,align="00",close=False):
         global generated
-        if composite:
-            return self.__getimage(composite,pos,time,align,close)
         self.hashstring = self.os+","+str(self.active)+","+self.text+","+self.subtext+","+str(self.icon)+","+self.title+","+str(self.buttons)+","+str(self.buttonstyles)+","+str(self.buttondefaults)+","+str(self.bar)+","+str(self.closebutton)+","+str(self.collapsed)+","+str(self.imgstr)
         if self.hashstring not in generated[self.os]:
             generated[self.os][self.hashstring] = self.__getimage()
-        return generated[self.os][self.hashstring]
+        if composite:
+            return self.__getimage(composite,pos,time,align,close,generated[self.os][self.hashstring])[0]
+        return generated[self.os][self.hashstring][0]
     def copy(self):
-        return Window(self.os,self.text,self.subtext,self.icon,self.title,self.buttons,self.buttonstyles,self.buttondefaults,self.bar,self.closebutton,self.active,self.collapsed,img=self.imgstr,startpos=self.startpos,animate=self.animate,startrotation=self.startrotation,animationlength=self.animationlength,origin=self.origin)
+        print("copying",self.closetimingfunction)
+        return Window(self.os,self.text,self.subtext,self.icon,self.title,self.buttons,self.buttonstyles,self.buttondefaults,self.bar,self.closebutton,self.active,self.collapsed,img=self.imgstr,startpos=self.startpos,animate=self.animate,startrotation=self.startrotation,animationlength=self.animationlength,origin=self.origin,animationcloselength=self.animationcloselength,timingfunction=self.timingfunction,endpos=self.endpos,endrotation=self.endrotation,endorigin=self.endorigin,closetimingfunction=self.closetimingfunction)
     def __str__(self):
         return self.hashstring
     def savestr(self):
@@ -210,7 +276,14 @@ class Window():
                b64encode(str(self.animate).encode("ascii")).decode("ascii")+","+\
                b64encode(str(self.startrotation).encode("ascii")).decode("ascii")+","+\
                b64encode(str(self.animationlength).encode("ascii")).decode("ascii")+","+\
-               b64encode(str(self.origin).encode("ascii")).decode("ascii")
+               b64encode(str(self.origin).encode("ascii")).decode("ascii")+","+\
+               b64encode(str(self.endpos).encode("ascii")).decode("ascii")+","+\
+               b64encode(str(self.endrotation).encode("ascii")).decode("ascii")+","+\
+               b64encode(str(self.endorigin).encode("ascii")).decode("ascii")+","+\
+               b64encode(str(self.animationcloselength).encode("ascii")).decode("ascii")+","+\
+               b64encode(dictindex(timingfunctions,presets[currentpreset].timingfunction).encode("ascii")).decode("ascii")+","+\
+               b64encode(dictindex(timingfunctions,presets[currentpreset].closetimingfunction).encode("ascii")).decode("ascii")
+               
 
 def getkeyframeswhosedatais(param,value):
     global keyframes
@@ -282,24 +355,30 @@ class Keyframe():
     def strframe(self,frame):
         return str(self.window)+","+str(self.x)+","+str(self.y)+","+self.align+(","+str(max(0,min(int(self.window.animationlength*60),frame-self.frame))) if self.window.cancomposite else "")+","+str(self.close)+","+(str(max(0,min(int(self.window.animationcloselength*60),frame-self.closeframe))) if self.window.cancomposite else "")+","+str(self.type)+","+str(self.data)
 def frametosavestr(frame):
-    return frame.window.savestr()+"|"+str(frame.frame)+"|"+str(frame.x)+"|"+str(frame.y)+"|"+frame.align+"|"+str(self.type)+"|"+str(self.data)
+    return frame.window.savestr()+"|"+str(frame.frame)+"|"+str(frame.x)+"|"+str(frame.y)+"|"+frame.align+"|"+str(frame.type)+"|"+str(list(frame.data.items()))
 def stringtobool(s):
     return True if s == "True" else False
 def stringtolist(s):
    #print("enter string:",s)
+    s = s.strip()
     s = s[1:-1]
     #print("clipped string:",s)
     s = s.split(",")
+    #print("s",s)
     finallist = []
     k = 0
     while k < len(s):
         i = s[k]
         #print(i)
         i = i.strip()
+        if not i:
+            k+=1
+            continue
         if i[0] == "[":
             innerlist = ""
             while True:
                 innerlist += s[k]
+                #print("innerlist",innerlist)
                 if s[k][-1] == "]":
                     break
                 innerlist += ","
@@ -343,20 +422,27 @@ def savestrtowindow(savestr):
         bar=stringtobool(b64decode(array[9].encode("ascii")).decode("ascii")),
         closebutton=stringtobool(b64decode(array[10].encode("ascii")).decode("ascii")),
         collapsed=stringtobool(b64decode(array[11].encode("ascii")).decode("ascii")))
-    if notcustom.os == "custom":
-        notcustom.imgstr = b64decode(array[12].encode("ascii")).decode("ascii")
+    notcustom.imgstr = b64decode(array[12].encode("ascii")).decode("ascii")
+    if notcustom.imgstr:
         notcustom.img = Image.open(notcustom.imgstr)
-        notcustom.startpos = tuple(stringtolist(b64decode(array[13].encode("ascii")).decode("ascii")))
-        notcustom.animate = stringtobool(b64decode(array[14].encode("ascii")).decode("ascii"))
-        notcustom.startrotation = tuple(stringtolist(b64decode(array[15].encode("ascii")).decode("ascii")))
-        notcustom.animationlength = float(b64decode(array[16].encode("ascii")).decode("ascii"))
-        notcustom.origin = tuple(stringtolist(b64decode(array[17].encode("ascii")).decode("ascii")))
+    notcustom.startpos = tuple(stringtolist(b64decode(array[13].encode("ascii")).decode("ascii")))
+    notcustom.animate = stringtobool(b64decode(array[14].encode("ascii")).decode("ascii"))
+    notcustom.startrotation = tuple(stringtolist(b64decode(array[15].encode("ascii")).decode("ascii")))
+    notcustom.animationlength = float(b64decode(array[16].encode("ascii")).decode("ascii"))
+    notcustom.origin = tuple(stringtolist(b64decode(array[17].encode("ascii")).decode("ascii")))
+    notcustom.endpos = tuple(stringtolist(b64decode(array[18].encode("ascii")).decode("ascii")))
+    notcustom.endrotation = tuple(stringtolist(b64decode(array[19].encode("ascii")).decode("ascii")))
+    notcustom.endorigin = tuple(stringtolist(b64decode(array[20].encode("ascii")).decode("ascii")))
+    notcustom.animationcloselength = float(b64decode(array[21].encode("ascii")).decode("ascii"))
+    notcustom.timingfunction = timingfunctions[b64decode(array[22].encode("ascii")).decode("ascii")]
+    notcustom.closetimingfunction = timingfunctions[b64decode(array[23].encode("ascii")).decode("ascii")]
     return notcustom
 #print(stringtolist(str([["hi",2,True],True,5,"hello"])))
 def savestrtoframe(savestr):
     array = savestr.split("|")
-    
-    return Keyframe(int(array[1]),int(array[2]),int(array[3]),savestrtowindow(array[0]),array[4])
+    #frame,x,y,window,align,keyframetype="error",data={}
+    thedata = stringtolist(array[6])
+    return Keyframe(int(array[1]),int(array[2]),int(array[3]),savestrtowindow(array[0]),array[4],array[5],{i:j for i,j in thedata})
 def savekeyframes(path):
     global keyframes
     global audiopath
@@ -662,7 +748,6 @@ def playback():
     global snap
     global currentdirection
     global currentpreset
-    #framenumber = round(curtime*60)
     try:
         pygame.fastevent.init()
         starttime = time.time()-keyframeview.cursor
@@ -671,7 +756,6 @@ def playback():
         chosenwindowimageSurface = None
         lastpos = None
         while not closed:
-                #if currentframe > 0.016666666:
             clockgame.tick(60)
             prevcurtime = curtime
             if playing:
@@ -685,42 +769,28 @@ def playback():
                     pygameSurface = geterrors(curtime)
             if not pygameSurface:
                 pygameSurface = geterrors(curtime)
-            #windowgame.fill(0)
             windowgame.blit(pygameSurface,(0,0))
             for event in pygame.fastevent.get():
-                #print(inspect.getmembers(event,inspect.code))
-                ##print(event.__dict__)
-                #print(event)
                 if event.type == pygame.QUIT:
                     closed = True
                 elif event.type == 1024 and not playing: #MouseMotion
                     chosenwindow = presets[currentpreset]
                     if chosenwindow != chosewindow:
-                    #returnimg = currentframeimg.copy()
                         chosenwindowimage = chosenwindow.image()
                         chosenwindowimageSurface = pygame.image.fromstring(chosenwindowimage.tobytes(), chosenwindowimage.size, "RGBA").convert_alpha()
-                    #windowgame.blit(chosenwindowimageSurface,event.pos)
                     lastpos = getalignedpos((round(event.pos[0]/snap)*snap,round(event.pos[1]/snap)*snap),currentdirection,chosenwindowimage.size)
-                    #print(currentdirection)
                 elif event.type == 1025 and pygame.mouse.get_pressed(num_buttons=3)[0]: #MouseDown
                     createkeyframe(event.pos[0],event.pos[1])
                     updatekeyframeview()
                 elif event.type == 32785 and pygame.mouse.get_pressed(num_buttons=5)[0]: #FocusGained, basically MouseDown
-                   # print(pygame.mouse.get_pressed(num_buttons=3))
                     createkeyframe(pygame.mouse.get_pos()[0],pygame.mouse.get_pos()[1])
                     updatekeyframeview()
                 elif event.type == 1027: #scroll
                     cascade(event.y)
                 elif event.type == 768: #keyboard
                     keyboard(event.scancode)
-                #else:
-                #    print(event)
-                    
-            #print(pygameSurface)]
-            #print(";;;")
             if chosenwindowimageSurface and not playing:
                 windowgame.blit(chosenwindowimageSurface,lastpos)
-            #print("mmmm")
             pygame.display.update()
             
             
@@ -792,7 +862,6 @@ def createkeyframeparam(frame,x,y,window,align,keyframetype,data,privatedata):
             else:
                 break
         if(keyframes[lastgoodi].frame != frame):
-            #print(lastgoodi,keyframes[lastgoodi].frame,frame)
             lastgoodi += 1
             keyframes.insert(lastgoodi,Keyframe(frame,x,y,window,align,keyframetype,data,privatedata))
         else:
@@ -803,6 +872,7 @@ def createkeyframeparam(frame,x,y,window,align,keyframetype,data,privatedata):
         return len(keyframes)-1
     #cachestart(frame)
     #print([i.frame for i in keyframes])
+
 
 def deletekeyframeparam(frame):
     global keyframeview
@@ -915,7 +985,9 @@ def updatekeyframeview():
     keyframeimage = ImageTk.PhotoImage(keyframeview.keyframeimage)
     keyframepanel.configure(image=keyframeimage)
     keyframepanel.image = keyframeimage
-    timestampvar.set(f"{floor(keyframeview.cursor/600)%10}{floor(keyframeview.cursor/60)%10}:{floor(keyframeview.cursor/10)%10}{str(keyframeview.cursor%10)[:5]}   frame: {round(keyframeview.cursor*60)}")
+    timestampvar.set(f"{floor(keyframeview.cursor*600)%10}{floor(keyframeview.cursor/60)%10}:{floor(keyframeview.cursor/10)%10}{str(keyframeview.cursor%10)[:5]}   frame: {round(keyframeview.cursor*60)}")
+def dictindex(dictionary,value):
+    return list(dictionary.keys())[list(dictionary.values()).index(value)]
 def updateentries(a=None,b=None,c=None):
     global entrytext
     global entrytitlevar
@@ -937,7 +1009,18 @@ def updateentries(a=None,b=None,c=None):
     global custompositionzvar
     global custompositionyvar
     global custompositionxvar
+    global customclosedurationvar
+    global customcloseoriginzvar
+    global customcloseoriginyvar
+    global customcloseoriginxvar
+    global customcloserotationzvar
+    global customcloserotationyvar
+    global customcloserotationxvar
+    global customclosepositionzvar
+    global customclosepositionyvar
+    global customclosepositionxvar
     global currentcustomimg
+    global selectedtimingfunction
     entrytext.delete(1.0,END)
     entrytext.insert(END,presets[currentpreset].text)
     entrytitlevar.set(presets[currentpreset].title)
@@ -957,7 +1040,20 @@ def updateentries(a=None,b=None,c=None):
     customoriginyvar.set(presets[currentpreset].origin[1])
     customoriginzvar.set(presets[currentpreset].origin[2])
     customdurationvar.set(presets[currentpreset].animationlength)
+    customclosepositionxvar.set(presets[currentpreset].endpos[0])
+    customclosepositionyvar.set(presets[currentpreset].endpos[1])
+    customclosepositionzvar.set(presets[currentpreset].endpos[2])
+    customcloserotationxvar.set(presets[currentpreset].endrotation[0])
+    customcloserotationyvar.set(presets[currentpreset].endrotation[1])
+    customcloserotationzvar.set(presets[currentpreset].endrotation[2])
+    customcloseoriginxvar.set(presets[currentpreset].endorigin[0])
+    customcloseoriginyvar.set(presets[currentpreset].endorigin[1])
+    customcloseoriginzvar.set(presets[currentpreset].endorigin[2])
+    customclosedurationvar.set(presets[currentpreset].animationcloselength)
     currentcustomimg = presets[currentpreset].imgstr
+    selectedtimingfunction.set(dictindex(timingfunctions,presets[currentpreset].timingfunction))
+    selectedclosetimingfunction.set(dictindex(timingfunctions,presets[currentpreset].closetimingfunction))
+    #timingfunctions[selectedtimingfunction.get()]
     #print(presets[currentpreset].animationlength)
 def updatepreset(a=None,b=None,c=None):
     global entrytext
@@ -980,7 +1076,18 @@ def updatepreset(a=None,b=None,c=None):
     global custompositionzvar
     global custompositionyvar
     global custompositionxvar
+    global customclosedurationvar
+    global customcloseoriginzvar
+    global customcloseoriginyvar
+    global customcloseoriginxvar
+    global customcloserotationzvar
+    global customcloserotationyvar
+    global customcloserotationxvar
+    global customclosepositionzvar
+    global customclosepositionyvar
+    global customclosepositionxvar
     global currentcustomimg
+    global selectedtimingfunction
     presetid = currentpreset
     presets[presetid].text = entrytext.get(1.0,END).strip().replace("\\n","\n")
     #print(entrytext.get(1.0,END).strip())
@@ -993,8 +1100,15 @@ def updatepreset(a=None,b=None,c=None):
     presets[currentpreset].startrotation = (float(customrotationxvar.get()),float(customrotationyvar.get()),float(customrotationzvar.get()))
     presets[currentpreset].origin = (float(customoriginxvar.get()),float(customoriginyvar.get()),float(customoriginzvar.get()))
     presets[currentpreset].animationlength = float(customdurationvar.get())
-    presets[currentpreset].imgstr = currentcustomimg
-    presets[currentpreset].img = Image.open(currentcustomimg)
+    presets[currentpreset].endpos = (float(customclosepositionxvar.get()),float(customclosepositionyvar.get()),float(customclosepositionzvar.get()))
+    presets[currentpreset].endrotation = (float(customcloserotationxvar.get()),float(customcloserotationyvar.get()),float(customcloserotationzvar.get()))
+    presets[currentpreset].endorigin = (float(customcloseoriginxvar.get()),float(customcloseoriginyvar.get()),float(customcloseoriginzvar.get()))
+    presets[currentpreset].animationcloselength = float(customclosedurationvar.get())
+    if currentcustomimg:
+        presets[currentpreset].imgstr = currentcustomimg
+        presets[currentpreset].img = Image.open(currentcustomimg)
+    presets[currentpreset].timingfunction = timingfunctions[selectedtimingfunction.get()]
+    presets[currentpreset].closetimingfunction = timingfunctions[selectedclosetimingfunction.get()]
     updatepresetview()
     #updatescreen()
 sound = None
@@ -1080,6 +1194,15 @@ def cascade(y):
     else:
         cascading = max(0,cascading-1)
     cascadingvar.set(f"Cascading distance: {cascading}")
+"""def moveerrorkeyframe(keyframeid,delta):
+    return
+def moveremovekeyframe(keyframeid,delta):
+    return
+
+movekeyframeslist = {"error":lambda keyframeid,delta: moveerrorkeyframe(keyframeid,delta),
+                     "remove":lambda keyframeid,delta: moveremovekeyframe(keyframeid,delta)}
+
+movekeyframeslist[keyframe.type](keyframeid,delta)"""
 def movekeyframe(keyframeid,delta):
     global keyframes
     if keyframes[keyframeid].type == "error":
@@ -1191,7 +1314,7 @@ def errorgetcache(frame,appended,timekeyframes,returnimg,lastcalculatedkeyframes
         success = True
     else:
         timekeyframes.append(keyframe)
-    return appended,success,returnimg
+    return appended,success,returnimg,lastcalculatedkeyframes
 def getkeyframeswhoseframesare(frame):
     global keyframes
     theframes = []
@@ -1245,7 +1368,7 @@ def removegetcache(frame,appended,timekeyframes,returnimg,lastcalculatedkeyframe
         if successappend in keyframecache:
             returnimg = keyframecache[successappend]
         lastcalculatedkeyframes = newcalculatedkeyframes
-    return appended,success,returnimg
+    return appended,success,returnimg,lastcalculatedkeyframes
 
 keyframecachetypes ={"error": (lambda frame,appended,timekeyframes,returnimg,lastcalculatedkeyframes,keyframesstr,keyframe: errorgetcache(frame,appended,timekeyframes,returnimg,lastcalculatedkeyframes,keyframesstr,keyframe)),
                 "remove": (lambda frame,appended,timekeyframes,returnimg,lastcalculatedkeyframes,keyframesstr,keyframe: removegetcache(frame,appended,timekeyframes,returnimg,lastcalculatedkeyframes,keyframesstr,keyframe))}
@@ -1266,13 +1389,14 @@ def checkcache(frame):
         for keyframe in keyframes:
             if keyframe.frame > frame:
                 break
-            appended,success,returnimg = keyframecachetypes[keyframe.type](frame,appended,timekeyframes,returnimg,lastcalculatedkeyframes,keyframesstr,keyframe)
+            appended,success,returnimg,lastcalculatedkeyframes = keyframecachetypes[keyframe.type](frame,appended,timekeyframes,returnimg,lastcalculatedkeyframes,keyframesstr,keyframe)
             keyframesstr = appended
             last = keyframe
         return timekeyframes[len(lastcalculatedkeyframes):],keyframesstr,[returnimg[1].copy(),returnimg[2].copy()],last,success,returnimg[:1]
     except Exception as e:
         print("ERROR in checkcache():",e)
     #print(keyframesstr)
+#{keyframe.strframe(100): [pygameimage,PILActiveImage,PILInactiveImage]}
 cachevisualizationdict = {}
 closed = False
 theressomethingtoconfigure = False
@@ -1379,8 +1503,8 @@ def cachejob(startframe):
             #print(i)
             i += 1
             
-        except Exception as e:
-            print("ERROR in cachejob():",e)
+        except Exception:
+            print("ERROR in cachejob():",sys.exc_info()[0](traceback.format_exc()))
             break
 def cachestart(start):
     global cacherefresh
@@ -1540,6 +1664,17 @@ def addpreset():
     global selectedicon
     global selectedos
     global currentcustomimg
+    global selectedtimingfunction
+    global customclosedurationvar
+    global customcloseoriginzvar
+    global customcloseoriginyvar
+    global customcloseoriginxvar
+    global customcloserotationzvar
+    global customcloserotationyvar
+    global customcloserotationxvar
+    global customclosepositionzvar
+    global customclosepositionyvar
+    global customclosepositionxvar
     presetwindow = Window()
     presetwindow.text = entrytext.get(1.0,END).strip().replace("\\n","\n")
     presetwindow.title = entrytitlevar.get()
@@ -1549,10 +1684,17 @@ def addpreset():
     presetwindow.os = selectedos.get()
     presetwindow.startpos = (float(custompositionxvar.get()),float(custompositionyvar.get()),float(custompositionzvar.get()))
     presetwindow.startrotation = (float(customrotationxvar.get()),float(customrotationyvar.get()),float(customrotationzvar.get()))
-    presetwindoworigin = (float(customoriginxvar.get()),float(customoriginyvar.get()),float(customoriginzvar.get()))
+    presetwindow.origin = (float(customoriginxvar.get()),float(customoriginyvar.get()),float(customoriginzvar.get()))
     presetwindow.animationlength = float(customdurationvar.get())
-    presetwindow.imgstr = currentcustomimg
-    presetwindow.img = Image.open(currentcustomimg)
+    presetwindow.endpos = (float(customclosepositionxvar.get()),float(customclosepositionyvar.get()),float(customclosepositionzvar.get()))
+    presetwindow.endrotation = (float(customcloserotationxvar.get()),float(customcloserotationyvar.get()),float(customcloserotationzvar.get()))
+    presetwindow.endorigin = (float(customcloseoriginxvar.get()),float(customcloseoriginyvar.get()),float(customcloseoriginzvar.get()))
+    presetwindow.closeanimationlength = float(customclosedurationvar.get())
+    if currentcustomimg:
+        presetwindow.imgstr = currentcustomimg
+        presetwindow.img = Image.open(currentcustomimg)
+    presetwindow.timingfunction = timingfunctions[selectedtimingfunction.get()]
+    presetwindow.closetimingfunction = timingfunctions[selectedclosetimingfunction.get()]
     presets.append(presetwindow)
     updatepresetview()
 
@@ -1672,7 +1814,7 @@ updatepresetbutton.grid(row=4,column=1,sticky="we",pady=4,padx=4)
 
 customlabel = Label(errorroot,text="custom parameters",bg="#1A1A1A",fg="#AAAAAA")
 customlabel.grid(row=5,column=0,pady=4,padx=4)
-customposlabel = Label(errorroot,text="start positon",bg="#1A1A1A",fg="#AAAAAA")
+customposlabel = Label(errorroot,text="start position",bg="#1A1A1A",fg="#AAAAAA")
 customposlabel.grid(row=6,column=0,pady=4,padx=4)
 custompositionxvar = StringVar()
 custompositionx = Entry(errorroot,textvariable=custompositionxvar,width=6,bg="#000000",fg="#AAAAAA",insertbackground="#CCCCCC",insertwidth=1,justify=CENTER,relief="raised",bd=3)
@@ -1716,6 +1858,7 @@ customduration = Entry(errorroot,textvariable=customdurationvar,width=6,bg="#000
 customduration.grid(row=9,column=1,sticky="we",pady=4,padx=4)
 
 
+
     
 currentcustomimg = ""
 def getcustomimage():
@@ -1727,6 +1870,71 @@ def getcustomimage():
 
 customimagebutton = Button(errorroot,text="browse image",command=getcustomimage,bg="#000000",fg="#FFFFFF",pady="-2p")
 customimagebutton.grid(row=10,column=0,sticky="we",pady=4,padx=4)
+
+timingfunctions = {"Linear":linear,
+                   "Windows 7 Cubic Opening":win7bezierapprox,
+                   "Windows 7 Cubic Closing":win7bezierapproxclose,
+                   "Cubic ease out":cubiceaseout,
+                   "Smooth":smooth}
+
+timingfunctionoptions = ["Linear","Windows 7 Cubic Opening","Windows 7 Cubic Closing","Cubic ease out","Smooth"]
+
+selectedtimingfunction = StringVar()
+choosetimingfunction = OptionMenu(errorroot,selectedtimingfunction,*timingfunctionoptions)
+choosetimingfunction.config(bg="#000000",fg="#AAAAAA",highlightcolor="#111111",activeforeground="#CCCCCC",activebackground="#111111",highlightbackground="#111111",width=5)
+choosetimingfunction.grid(row=10,column=1,sticky="we",pady=4,padx=4)
+
+
+
+
+customcloseposlabel = Label(errorroot,text="close position",bg="#1A1A1A",fg="#AAAAAA")
+customcloseposlabel.grid(row=11,column=0,pady=4,padx=4)
+customclosepositionxvar = StringVar()
+customclosepositionx = Entry(errorroot,textvariable=customclosepositionxvar,width=6,bg="#000000",fg="#AAAAAA",insertbackground="#CCCCCC",insertwidth=1,justify=CENTER,relief="raised",bd=3)
+customclosepositionx.grid(row=11,column=1,sticky="we",pady=4,padx=4)
+customclosepositionyvar = StringVar()
+customclosepositiony = Entry(errorroot,textvariable=customclosepositionyvar,width=6,bg="#000000",fg="#AAAAAA",insertbackground="#CCCCCC",insertwidth=1,justify=CENTER,relief="raised",bd=3)
+customclosepositiony.grid(row=11,column=2,sticky="we",pady=4,padx=4)
+customclosepositionzvar = StringVar()
+customclosepositionz = Entry(errorroot,textvariable=customclosepositionzvar,width=6,bg="#000000",fg="#AAAAAA",insertbackground="#CCCCCC",insertwidth=1,justify=CENTER,relief="raised",bd=3)
+customclosepositionz.grid(row=11,column=3,sticky="we",pady=4,padx=4)
+
+customcloserotlabel = Label(errorroot,text="close rotation",bg="#1A1A1A",fg="#AAAAAA")
+customcloserotlabel.grid(row=12,column=0,pady=4,padx=4)
+customcloserotationxvar = StringVar()
+customcloserotationx = Entry(errorroot,textvariable=customcloserotationxvar,width=6,bg="#000000",fg="#AAAAAA",insertbackground="#CCCCCC",insertwidth=1,justify=CENTER,relief="raised",bd=3)
+customcloserotationx.grid(row=12,column=1,sticky="we",pady=4,padx=4)
+customcloserotationyvar = StringVar()
+customcloserotationy = Entry(errorroot,textvariable=customcloserotationyvar,width=6,bg="#000000",fg="#AAAAAA",insertbackground="#CCCCCC",insertwidth=1,justify=CENTER,relief="raised",bd=3)
+customcloserotationy.grid(row=12,column=2,sticky="we",pady=4,padx=4)
+customcloserotationzvar = StringVar()
+customcloserotationz = Entry(errorroot,textvariable=customcloserotationzvar,width=6,bg="#000000",fg="#AAAAAA",insertbackground="#CCCCCC",insertwidth=1,justify=CENTER,relief="raised",bd=3)
+customcloserotationz.grid(row=12,column=3,sticky="we",pady=4,padx=4)
+
+customcloseorglabel = Label(errorroot,text="close rotation origin",bg="#1A1A1A",fg="#AAAAAA")
+customcloseorglabel.grid(row=13,column=0,pady=4,padx=4)
+customcloseoriginxvar = StringVar()
+customcloseoriginx = Entry(errorroot,textvariable=customcloseoriginxvar,width=6,bg="#000000",fg="#AAAAAA",insertbackground="#CCCCCC",insertwidth=1,justify=CENTER,relief="raised",bd=3)
+customcloseoriginx.grid(row=13,column=1,sticky="we",pady=4,padx=4)
+customcloseoriginyvar = StringVar()
+customcloseoriginy = Entry(errorroot,textvariable=customcloseoriginyvar,width=6,bg="#000000",fg="#AAAAAA",insertbackground="#CCCCCC",insertwidth=1,justify=CENTER,relief="raised",bd=3)
+customcloseoriginy.grid(row=13,column=2,sticky="we",pady=4,padx=4)
+customcloseoriginzvar = StringVar()
+customcloseoriginz = Entry(errorroot,textvariable=customcloseoriginzvar,width=6,bg="#000000",fg="#AAAAAA",insertbackground="#CCCCCC",insertwidth=1,justify=CENTER,relief="raised",bd=3)
+customcloseoriginz.grid(row=13,column=3,sticky="we",pady=4,padx=4)
+
+
+customclosedurlabel = Label(errorroot,text="close animation duration",bg="#1A1A1A",fg="#AAAAAA")
+customclosedurlabel.grid(row=14,column=0,pady=4,padx=4)
+customclosedurationvar = StringVar()
+customcloseduration = Entry(errorroot,textvariable=customclosedurationvar,width=6,bg="#000000",fg="#AAAAAA",insertbackground="#CCCCCC",insertwidth=1,justify=CENTER,relief="raised",bd=3)
+customcloseduration.grid(row=14,column=1,sticky="we",pady=4,padx=4)
+
+selectedclosetimingfunction = StringVar()
+chooseclosetimingfunction = OptionMenu(errorroot,selectedclosetimingfunction,*timingfunctionoptions)
+chooseclosetimingfunction.config(bg="#000000",fg="#AAAAAA",highlightcolor="#111111",activeforeground="#CCCCCC",activebackground="#111111",highlightbackground="#111111",width=5)
+chooseclosetimingfunction.grid(row=15,column=1,sticky="we",pady=4,padx=4)
+
 
 
 bigfont = tkfont.Font(family="Helvetica",size="20")

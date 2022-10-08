@@ -804,82 +804,12 @@ def stretch(size,amount,c):
     result = size-size*(size/(size-size/amount)) #this is needed because deform() does the opposite of what you would think it will do, it takes 4 points, and then squishes them into a rectangle.
     return mix(result,0,c)
 
-from generate import *
-from PIL import Image,ImageChops
-from math import *
-import numpy
-from scipy.spatial.transform import Rotation as R
-
-def find_coeffs(pa, pb):
-    matrix = []
-    for p1, p2 in zip(pa, pb):
-        matrix.append([p1[0], p1[1], 1, 0, 0, 0, -p2[0]*p1[0], -p2[0]*p1[1]])
-        matrix.append([0, 0, 0, p1[0], p1[1], 1, -p2[1]*p1[0], -p2[1]*p1[1]])
-
-    A = numpy.matrix(matrix, dtype=numpy.float)
-    B = numpy.array(pb).reshape(8)
-
-    res = numpy.dot(numpy.linalg.inv(A.T * A) * A.T, B)
-    return numpy.array(res).reshape(8)
 
 
-#Window = Create7Window(text="is this real oh my god sfisjsighjrlgh\ndfgdreregeioghrath\nigrgorthji\nihoitt",icon="7/Critical Error.png",title="is this real",buttons=[["No",4]])
-def rotate(vec,angles):
-    
-    angle = np.array(angles/180*pi)
-    #print(angles)
-    rot = R.from_rotvec(angle)
-    #print(vec)
-    return rot.apply(vec)
 
-def translaterotateproject(width,height,position,rotation,origin,corner,perspective=250):
-    vec = np.array((width*corner[0]-(width*origin[0])/2,height*corner[1]-(height*origin[1])/2,0))
-    rotated = rotate(vec,rotation)
-    z = 1+rotated[2]/perspective+position[2]
-    projected = [(rotated[0]-width*(0.5-origin[0]/2))/z+width/2+position[0],(rotated[1]-height*(0.5-origin[1]/2))/z+height/2+position[1]]
-    return projected
-
-def getcrd(t,Window):
-    t = min(1,max(0,t))
-    startrotation = np.array((5,0,0))
-    startpos = np.array((0,-0.017,0.1))
-    origin = (0,1,0)
-    NW = translaterotateproject(w(Window),h(Window),startpos*(1-t),startrotation*(1-t),origin,(0,0,0))
-    NE = translaterotateproject(w(Window),h(Window),startpos*(1-t),startrotation*(1-t),origin,(1,0,0))
-    SW = translaterotateproject(w(Window),h(Window),startpos*(1-t),startrotation*(1-t),origin,(0,1,0))
-    SE = translaterotateproject(w(Window),h(Window),startpos*(1-t),startrotation*(1-t),origin,(1,1,0))
-    return [NW,NE,SE,SW]
-
-def getcrdclose(t,Window):
-    t = min(1,max(0,t))
-    startrotation = np.array((-5,-2,0))
-    startpos = np.array((0,0,0))
-    origin = (0,2,0)
-    NW = translaterotateproject(w(Window),h(Window),startpos*(1-t),startrotation*(1-t),origin,(0,0,0))
-    NE = translaterotateproject(w(Window),h(Window),startpos*(1-t),startrotation*(1-t),origin,(1,0,0))
-    SW = translaterotateproject(w(Window),h(Window),startpos*(1-t),startrotation*(1-t),origin,(0,1,0))
-    SE = translaterotateproject(w(Window),h(Window),startpos*(1-t),startrotation*(1-t),origin,(1,1,0))
-    return [NW,NE,SE,SW]
-
-def bezierapprox(x):
-    return 1.08334*x**0.817775-0.0822632*x**1.48583
-
-def bezierapproxclose(x):
-    return 0.922396*x**1.234158-0.0768603*x**11.3377
-
-class Windows7Anim:
-    def __init__(self,second):
-        self.second = second
-    
-    def getmesh(self, img):
-        return [((0,0,w(img),h(img)),(stretch(w(img),30,self.second*4),stretch(h(img),56,self.second*4),
-                                      stretch(w(img),18,self.second*4),h(img)-stretch(h(img),16,self.second*4),
-                                      w(img)-stretch(w(img),18,self.second*4),h(img)-stretch(h(img),16,self.second*4),
-                                      w(img)-stretch(w(img),30,self.second*4),stretch(h(img),56,self.second*4)))]  #values arbitrary, somebody needs to look into dwm and find how it animates the window
-    #def getmesh(self):
         
 
-def Create7Window(icon="",text="",title="",pos=(0,0),screenres=(1920,1080),wallpaper=None,active=True,buttons=[],time=1,align="00",close=False):
+def Create7Window(icon="",text="",title="",active=True,buttons=[]):
     #print(time)
     #pos and screenres dictate the glass texture position and size on the window border
     #if wallpaper is not empty, it will composite the error onto an image at pos's coordinates, screenres should be the same size as the wallpaper
@@ -887,8 +817,6 @@ def Create7Window(icon="",text="",title="",pos=(0,0),screenres=(1920,1080),wallp
     contentheight = 53
     textpos = 0
     textposy = 25+13
-    if wallpaper:
-        screenres = wallpaper.size
     if(text != ""):
         TextDim = measuretext7(text,"7//fonts//text//",kerningadjust=-1)
         contentwidth = max(contentwidth,TextDim[0]+38+12)
@@ -908,7 +836,7 @@ def Create7Window(icon="",text="",title="",pos=(0,0),screenres=(1920,1080),wallp
     buttonswidth = 0
     #len(buttons)*95
     for i in buttons:
-        tempbuttontextsize = measuretext7(i[0],"7\\fonts\\text\\",kerningadjust=-1)
+        tempbuttontextsize = measuretext7(i[0],"7/fonts/text/",kerningadjust=-1)
         buttonswidth += max(tempbuttontextsize[0]+16,86) + 10
     if(buttons):
         contentheight += 49
@@ -953,9 +881,10 @@ def Create7Window(icon="",text="",title="",pos=(0,0),screenres=(1920,1080),wallp
     width = contentwidth+8+8
     height = contentheight+8+30
     GlassMask = resize(GlassMask,width,height,8,8,30,8)
-    #Glass = put(Image.new("RGBA",(800,602),(0,0,0,0)),GlassImg.resize(screenres),int((width/screenres[0])*50-50-pos[0]+pos[0]*0.12173472694),0)
-    Glass = put(Image.new("RGBA",(800,602),(0,0,0,0)),GlassImg.resize(screenres,0),int(-pos[0]+width/16-screenres[0]/16+pos[0]/8),-pos[1])
-    WithBorder = ImageChops.multiply(GlassMask,Glass)
+    ###Glass = put(Image.new("RGBA",(800,602),(0,0,0,0)),GlassImg.resize(screenres,0),int(-pos[0]+width/16-screenres[0]/16+pos[0]/8),-pos[1])
+    
+    #WithBorder = ImageChops.multiply(GlassMask)
+    WithBorder = Image.new("RGBA",(width,height))
     WithBorder = put(WithBorder, SideGlowLeft, 0, 0)
     WithBorder = put(WithBorder, SideGlowRight, width, 0, "20")
     WithBorder = put(WithBorder, SideShine.resize((w(SideShine),(height-29-8)//4)), 0, 29)
@@ -975,37 +904,27 @@ def Create7Window(icon="",text="",title="",pos=(0,0),screenres=(1920,1080),wallp
     IMAGE = put(IMAGE, resize(ShadowRight,20,height,1,1,17,17),width+14,14)
     IMAGE = put(IMAGE, resize(ShadowBottom,width+34,20,30,29,1,1),0,height+14)
     IMAGE = put(IMAGE,WithBorder,14,14)
-    if not close:
-        t = min(1,bezierapprox(max(0,min(1,time*4))))
-        crd = getcrd(t,IMAGE)
-    else:
-        t = min(1,bezierapproxclose(max(0,min(1,1-time*6))))
-        crd = getcrdclose(t,IMAGE)
-    coeffs = find_coeffs(crd,[[0,0],[w(IMAGE),0],[w(IMAGE),h(IMAGE)],[0,h(IMAGE)]])
-    IMAGE = IMAGE.transform(IMAGE.size, Image.PERSPECTIVE, coeffs,Image.LINEAR)
+    #if not close:
+    #    t = min(1,bezierapprox(max(0,min(1,time*4))))
+    #    crd = getcrd(t,IMAGE)
+    #else:
+    #    t = min(1,bezierapproxclose(max(0,min(1,1-time*6))))
+    #    crd = getcrdclose(t,IMAGE)
+    #coeffs = find_coeffs(crd,[[0,0],[w(IMAGE),0],[w(IMAGE),h(IMAGE)],[0,h(IMAGE)]])
+    #IMAGE = IMAGE.transform(IMAGE.size, Image.PERSPECTIVE, coeffs,Image.LINEAR)
     #IMAGE = ImageChops.blend(no,transformed,t)
     
     
 #IMAGE = ImageChops.blend(no,transformed,t)
-    if(wallpaper):
-        GlassMask = GlassMask.transform(GlassMask.size, Image.PERSPECTIVE, coeffs,Image.LINEAR)
-        Blur = wallpaper.filter(ImageFilter.GaussianBlur(radius=12))
-        masked = ImageChops.multiply(put(Image.new("RGBA",wallpaper.size,(0,0,0,0)),GlassMask,pos[0], pos[1],align),Blur)
-        masked = put(masked,IMAGE,pos[0]-14*(1-int(align[0])),pos[1]-14*(1-int(align[1])),align)
-        no = masked.copy()
-        no.putalpha(0)
-        masked = ImageChops.blend(no,masked,t)
-        #masked.show()
-        BlurredWallpaper = put(wallpaper,masked,0,0)
-        #wallpaper.filter(ImageFilter.GaussianBlur(radius=12)).save("blurred.png")
-        #IMAGE = put(BlurredWallpaper, IMAGE, pos[0]-14, pos[1]-14)
-        IMAGE = BlurredWallpaper
-    else:
-        no = IMAGE.copy()
-        no.putalpha(0)
-        IMAGE = ImageChops.blend(no,IMAGE,t)
+    #GlassMask = GlassMask.transform(GlassMask.size, Image.PERSPECTIVE, coeffs,Image.LINEAR)
+    #Blur = wallpaper.filter(ImageFilter.GaussianBlur(radius=12))
+    #masked = ImageChops.multiply(put(Image.new("RGBA",wallpaper.size,(0,0,0,0)),GlassMask,pos[0], pos[1],align),Blur)
+    #masked = put(masked,IMAGE,pos[0]-14*(1-int(align[0])),pos[1]-14*(1-int(align[1])),align)
+    #no = masked.copy()
+    #no.putalpha(0)
+    #masked = ImageChops.blend(no,masked,t)
         
-    return IMAGE
+    return IMAGE,GlassMask
 
 """def Create7ButtonPanel(buttons,windowwidth=360,screenres=(1920,1080)):
     summedwidth = 11
