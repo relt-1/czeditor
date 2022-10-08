@@ -1,0 +1,5 @@
+numpy==1.23.3
+Pillow==9.2.0
+pydub==0.25.1
+pygame==2.1.2
+scipy==1.9.1
