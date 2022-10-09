@@ -143,11 +143,11 @@ def Composite7(img, GlassMask, time, startpos, startrotation, origin, wallpaper,
 
 
 composites = {
-    "xp": (lambda img, mask, time, startpos, startrotation, origin, wallpaper, pos, align: ExecuteCustomWindowAnimation(
+    OS.XP: (lambda img, mask, time, startpos, startrotation, origin, wallpaper, pos, align: ExecuteCustomWindowAnimation(
         img, CreateCustomWindowAnimation(img, time, startpos, startrotation, origin), time, wallpaper, pos, align
         )),
     OS.WINDOWS_7: (lambda img, mask, time, startpos, startrotation, origin, wallpaper, pos, align: Composite7(img, mask, time, startpos, startrotation, origin, wallpaper, pos, align)),
-    "custom": (lambda img, mask, time, startpos, startrotation, origin, wallpaper, pos, align: ExecuteCustomWindowAnimation(
+    OS.CUSTOM: (lambda img, mask, time, startpos, startrotation, origin, wallpaper, pos, align: ExecuteCustomWindowAnimation(
         img, CreateCustomWindowAnimation(img, time, startpos, startrotation, origin), time, wallpaper, pos, align
         ))
 }
