@@ -28,7 +28,7 @@ class OS(Enum):
     UBUNTU = "ubuntu"
     WINDOWS_95 = "95"
     MAC = "macwindow"
-    MAC_WINDOW_ID = "macwindoid"
+    MAC_WINDOID = "macwindoid"
     WINDOWS_7 = "7"
     CUSTOM = "custom"
 
@@ -181,8 +181,8 @@ class Window():
                     button2style=self.buttonstyles[1],
                     button3style=self.buttonstyles[2]
                     )
-            elif self.os == OS.MAC_WINDOW_ID:
-                new = CreateMacWindoid(icon=self.icons[OS.MAC_WINDOW_ID][self.icon], text=self.text, collapsed=self.collapsed)
+            elif self.os == OS.MAC_WINDOID:
+                new = CreateMacWindoid(icon=self.icons[OS.MAC_WINDOID][self.icon], text=self.text, collapsed=self.collapsed)
             elif self.os == OS.UBUNTU:
                 new = CreateUbuntuWindow(icon=self.icons[OS.UBUNTU][self.icon], bigtext=self.text, text=self.subtext, title=self.title, buttons=self.buttons, active=self.active)
             elif self.os == OS.WINDOWS_95:
@@ -254,7 +254,7 @@ class Window():
                 "xp/Exclamation.png",
                 "xp/Information.png",
                 "xp/Question.png"],
-            OS.MAC_WINDOW_ID: ["",
+            OS.MAC_WINDOID: ["",
                            "mac/Speech Bubble"],
             OS.UBUNTU: ["ubuntu/Error.png",
                        "ubuntu/Exclamation.png",
@@ -317,7 +317,7 @@ class Window():
         return self.hashstring
 
     def savestr(self):
-        return b64encode(str(self.os).encode("ascii")).decode("ascii") + "," + \
+        return b64encode(self.os.value.encode("ascii")).decode("ascii") + "," + \
                b64encode(str(self.active).encode("ascii")).decode("ascii") + "," + \
                b64encode(self.text.encode("ascii")).decode("ascii") + "," + \
                b64encode(self.subtext.encode("ascii")).decode("ascii") + "," + \
@@ -486,7 +486,7 @@ def stringtolist(s):
 def savestrtowindow(savestr):
     array = savestr.split(",")
     notcustom = Window(
-        os=b64decode(array[0].encode("ascii")).decode("ascii"),
+        os=OS(b64decode(array[0].encode("ascii")).decode("ascii")),
         text=b64decode(array[2].encode("ascii")).decode("ascii"),
         subtext=b64decode(array[3].encode("ascii")).decode("ascii"),
         icon=int(b64decode(array[4].encode("ascii")).decode("ascii")),
