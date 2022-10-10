@@ -4,14 +4,13 @@ from PIL import ImageTk, Image, ImageDraw, ImageChops, ImageFilter
 import time
 from generate import *
 from pydub import AudioSegment
-from pydub.playback import _play_with_simpleaudio
 import functools
 import concurrent.futures
 import os
 from base64 import *
 from tkinter.filedialog import *
 import pygame
-# import inspect
+# import inspect*
 import wavfile
 # import pprint
 # import palanteer
@@ -32,7 +31,7 @@ emptyimg = Image.new("RGBA", (100, 100), (255, 0, 255))
 
 
 def win7bezierapprox(x):
-    return 1.08334 * x ** 0.817775 - 0.0822632 * x ** 1.48583
+    return 1.08334 * x** 0.817775 - 0.0822632 * x ** 1.48583
 
 
 def win7bezierapproxclose(x):
