@@ -1,3 +1,4 @@
+from enum import Enum
 from tkinter import *
 import tkinter.font as tkfont
 from PIL import ImageTk, Image, ImageDraw, ImageChops, ImageFilter
@@ -22,12 +23,21 @@ import sys
 import traceback
 from math import pi
 
+class OS(Enum):
+    XP = "xp"
+    UBUNTU = "ubuntu"
+    WINDOWS_95 = "95"
+    MAC = "macwindow"
+    MAC_WINDOID = "macwindoid"
+    WINDOWS_7 = "7"
+    CUSTOM = "custom"
+
 globalcache = {}
 framecache = {}
 keyframecache = {}
 filledframes = {}
 openedimages = {}
-generated = {"xp": {}, "ubuntu": {}, "95": {}, "macwindow": {}, "7": {}, "custom": {}}
+generated = {os_type: {} for os_type in OS}
 emptyimg = Image.new("RGBA", (100, 100), (255, 0, 255))
 
 
@@ -133,11 +143,11 @@ def Composite7(img, GlassMask, time, startpos, startrotation, origin, wallpaper,
 
 
 composites = {
-    "xp": (lambda img, mask, time, startpos, startrotation, origin, wallpaper, pos, align: ExecuteCustomWindowAnimation(
+    OS.XP: (lambda img, mask, time, startpos, startrotation, origin, wallpaper, pos, align: ExecuteCustomWindowAnimation(
         img, CreateCustomWindowAnimation(img, time, startpos, startrotation, origin), time, wallpaper, pos, align
         )),
-    "7": (lambda img, mask, time, startpos, startrotation, origin, wallpaper, pos, align: Composite7(img, mask, time, startpos, startrotation, origin, wallpaper, pos, align)),
-    "custom": (lambda img, mask, time, startpos, startrotation, origin, wallpaper, pos, align: ExecuteCustomWindowAnimation(
+    OS.WINDOWS_7: (lambda img, mask, time, startpos, startrotation, origin, wallpaper, pos, align: Composite7(img, mask, time, startpos, startrotation, origin, wallpaper, pos, align)),
+    OS.CUSTOM: (lambda img, mask, time, startpos, startrotation, origin, wallpaper, pos, align: ExecuteCustomWindowAnimation(
         img, CreateCustomWindowAnimation(img, time, startpos, startrotation, origin), time, wallpaper, pos, align
         ))
 }
@@ -157,12 +167,12 @@ class Window():
     def __getimage(self, composite=False, pos=(0, 0), time=1, align="", close=False, generated=None):
         mask = None
         if generated is None:
-            if self.os == "xp":
+            if self.os == OS.XP:
                 new = CreateXPWindow(
                     0, 0,
                     captiontext=self.title,
                     active=self.active,
-                    erroriconpath=self.icons["xp"][self.icon],
+                    erroriconpath=self.icons[OS.XP][self.icon],
                     errortext=self.text,
                     button1=self.buttons[0],
                     button2=self.buttons[1],
@@ -171,17 +181,17 @@ class Window():
                     button2style=self.buttonstyles[1],
                     button3style=self.buttonstyles[2]
                     )
-            elif self.os == "macwindoid":
-                new = CreateMacWindoid(icon=self.icons["macwindoid"][self.icon], text=self.text, collapsed=self.collapsed)
-            elif self.os == "ubuntu":
-                new = CreateUbuntuWindow(icon=self.icons["ubuntu"][self.icon], bigtext=self.text, text=self.subtext, title=self.title, buttons=self.buttons, active=self.active)
-            elif self.os == "95":
-                new = Create95Window(icon=self.icons["95"][self.icon], text=self.text, title=self.title, buttons=self.buttons, active=self.active, closebutton=self.closebutton)
-            elif self.os == "macwindow":
+            elif self.os == OS.MAC_WINDOID:
+                new = CreateMacWindoid(icon=self.icons[OS.MAC_WINDOID][self.icon], text=self.text, collapsed=self.collapsed)
+            elif self.os == OS.UBUNTU:
+                new = CreateUbuntuWindow(icon=self.icons[OS.UBUNTU][self.icon], bigtext=self.text, text=self.subtext, title=self.title, buttons=self.buttons, active=self.active)
+            elif self.os == OS.WINDOWS_95:
+                new = Create95Window(icon=self.icons[OS.WINDOWS_95][self.icon], text=self.text, title=self.title, buttons=self.buttons, active=self.active, closebutton=self.closebutton)
+            elif self.os == OS.MAC:
                 new = CreateMacWindow(
                     0, 0,
                     title=self.title,
-                    icon=self.icons["macwindow"][self.icon],
+                    icon=self.icons[OS.MAC][self.icon],
                     errortext=self.text,
                     button1=self.buttons[0],
                     button2=self.buttons[1],
@@ -193,13 +203,13 @@ class Window():
                     button2default=self.buttondefaults[1],
                     button3default=self.buttondefaults[2]
                     )
-            elif self.os == "7":
+            elif self.os == OS.WINDOWS_7:
                 temp = []
                 for i in range(len(self.buttons)):
                     if self.buttons[i] != "":
                         temp.append([self.buttons[i], self.buttonstyles[i]])
-                new, mask = Create7Window(icon=self.icons["7"][self.icon], text=self.text, title=self.title, buttons=temp, active=self.active)
-            elif self.os == "custom":
+                new, mask = Create7Window(icon=self.icons[OS.WINDOWS_7][self.icon], text=self.text, title=self.title, buttons=temp, active=self.active)
+            elif self.os == OS.CUSTOM:
                 new = self.img
         else:
             new = generated[0].copy()
@@ -220,7 +230,7 @@ class Window():
         return new, mask
 
     def __init__(
-            self, os="xp", text="", subtext="", icon=0, title="", buttons=["", "", ""], buttonstyles=[0, 0, 0], buttondefaults=[False, False, False], bar=True, closebutton=True, active=True,
+            self, os: OS = OS.XP, text="", subtext="", icon=0, title="", buttons=["", "", ""], buttonstyles=[0, 0, 0], buttondefaults=[False, False, False], bar=True, closebutton=True, active=True,
             collapsed=False, img="", startpos=(0, 0, 0), animate=True, startrotation=(0, 0, 0), animationlength=0.016666666, origin=(0, 0, 0), animationcloselength=0.0166666666,
             timingfunction=win7bezierapprox, endpos=(0, 0, 0), endrotation=(0, 0, 0), endorigin=(0, 0, 0), closetimingfunction=win7bezierapproxclose
             ):
@@ -239,31 +249,31 @@ class Window():
         self.collapsed = collapsed
 
         self.icons = {
-            "xp": [
+            OS.XP: [
                 "xp/Critical Error.png",
                 "xp/Exclamation.png",
                 "xp/Information.png",
                 "xp/Question.png"],
-            "macwindoid": ["",
+            OS.MAC_WINDOID: ["",
                            "mac/Speech Bubble"],
-            "ubuntu": ["ubuntu/Error.png",
+            OS.UBUNTU: ["ubuntu/Error.png",
                        "ubuntu/Exclamation.png",
                        "ubuntu/Attention.png",
                        "ubuntu/Information.png",
                        "ubuntu/Question Mark.png"],
-            "95": ["95/Critical Error.png",
-                   "95/Exclamation.png.png",
+            OS.WINDOWS_95: ["95/Critical Error.png",
+                   "95/Exclamation.png",
                    "95/Information.png",
                    "95/Question.png"],
-            "macwindow": ["mac/hand.png",
+            OS.MAC: ["mac/hand.png",
                           "mac/Exclamation.png",
                           "mac/Speech Bubble.png"],
-            "7": ["7/Critical Error.png",
+            OS.WINDOWS_7: ["7/Critical Error.png",
                   "7/Exclamation.png",
                   "7/Information.png",
                   "7/Question Mark.png"]
         }
-        self.cancomposite = self.os in ["7", "custom"]
+        self.cancomposite = self.os in [OS.WINDOWS_7, OS.CUSTOM]
         self.imgstr = img
         if self.imgstr:
             self.img = openimage(self.imgstr)
@@ -275,7 +285,7 @@ class Window():
         self.animationlength = animationlength
         self.animationcloselength = animationcloselength
         self.origin = origin
-        self.hashstring = self.os + "," + str(self.active) + "," + self.text + "," + self.subtext + "," + str(self.icon) + "," + self.title + "," + str(self.buttons) + "," + str(
+        self.hashstring = str(self.os) + "," + str(self.active) + "," + self.text + "," + self.subtext + "," + str(self.icon) + "," + self.title + "," + str(self.buttons) + "," + str(
             self.buttonstyles
             ) + "," + str(self.buttondefaults) + "," + str(self.bar) + "," + str(self.closebutton) + "," + str(self.collapsed) + "," + str(self.imgstr)
         self.timingfunction = timingfunction
@@ -286,7 +296,7 @@ class Window():
 
     def image(self, composite=None, pos=None, time=1, align="00", close=False):
         global generated
-        self.hashstring = self.os + "," + str(self.active) + "," + self.text + "," + self.subtext + "," + str(self.icon) + "," + self.title + "," + str(self.buttons) + "," + str(
+        self.hashstring = str(self.os) + "," + str(self.active) + "," + self.text + "," + self.subtext + "," + str(self.icon) + "," + self.title + "," + str(self.buttons) + "," + str(
             self.buttonstyles
             ) + "," + str(self.buttondefaults) + "," + str(self.bar) + "," + str(self.closebutton) + "," + str(self.collapsed) + "," + str(self.imgstr)
         if self.hashstring not in generated[self.os]:
@@ -307,7 +317,7 @@ class Window():
         return self.hashstring
 
     def savestr(self):
-        return b64encode(self.os.encode("ascii")).decode("ascii") + "," + \
+        return b64encode(self.os.value.encode("ascii")).decode("ascii") + "," + \
                b64encode(str(self.active).encode("ascii")).decode("ascii") + "," + \
                b64encode(self.text.encode("ascii")).decode("ascii") + "," + \
                b64encode(self.subtext.encode("ascii")).decode("ascii") + "," + \
@@ -476,7 +486,7 @@ def stringtolist(s):
 def savestrtowindow(savestr):
     array = savestr.split(",")
     notcustom = Window(
-        os=b64decode(array[0].encode("ascii")).decode("ascii"),
+        os=OS(b64decode(array[0].encode("ascii")).decode("ascii")),
         text=b64decode(array[2].encode("ascii")).decode("ascii"),
         subtext=b64decode(array[3].encode("ascii")).decode("ascii"),
         icon=int(b64decode(array[4].encode("ascii")).decode("ascii")),
@@ -492,13 +502,13 @@ def savestrtowindow(savestr):
     if notcustom.imgstr:
         notcustom.img = Image.open(notcustom.imgstr)
     if len(array) == 18:
-        if notcustom.os == "custom":
+        if notcustom.os == OS.CUSTOM:
             notcustom.startpos = tuple(stringtolist(b64decode(array[13].encode("ascii")).decode("ascii")))
             notcustom.animate = stringtobool(b64decode(array[14].encode("ascii")).decode("ascii"))
             notcustom.startrotation = tuple(stringtolist(b64decode(array[15].encode("ascii")).decode("ascii")))
             notcustom.animationlength = float(b64decode(array[16].encode("ascii")).decode("ascii"))
             notcustom.origin = tuple(stringtolist(b64decode(array[17].encode("ascii")).decode("ascii")))
-        elif notcustom.os == "7":
+        elif notcustom.os == OS.WINDOWS_7:
             notcustom.startpos = (0, -0.017, 0.1)
             notcustom.animate = True
             notcustom.startrotation = (5, 0, 0)
@@ -1161,7 +1171,7 @@ def updateentries(a=None, b=None, c=None):
     entrybutton2var.set(presets[currentpreset].buttons[1])
     entrybutton3var.set(presets[currentpreset].buttons[2])
     selectedicon.set(iconlist[presets[currentpreset].icon])
-    selectedos.set(presets[currentpreset].os)
+    selectedos.set(presets[currentpreset].os.value)
     custompositionxvar.set(presets[currentpreset].startpos[0])
     custompositionyvar.set(presets[currentpreset].startpos[1])
     custompositionzvar.set(presets[currentpreset].startpos[2])
@@ -1229,7 +1239,7 @@ def updatepreset(a=None, b=None, c=None):
     # print(presets[presetid].buttons)
     presets[presetid].buttons = [entrybutton1var.get(), entrybutton2var.get(), entrybutton3var.get()]
     presets[presetid].icon = int(selectedicon.get()[0])
-    presets[presetid].os = selectedos.get()
+    presets[presetid].os = OS(selectedos.get())
     presets[currentpreset].startpos = (float(custompositionxvar.get()), float(custompositionyvar.get()), float(custompositionzvar.get()))
     presets[currentpreset].startrotation = (float(customrotationxvar.get()), float(customrotationyvar.get()), float(customrotationzvar.get()))
     presets[currentpreset].origin = (float(customoriginxvar.get()), float(customoriginyvar.get()), float(customoriginzvar.get()))
@@ -1870,7 +1880,7 @@ def addpreset():
     # print(presets[presetid].buttons)
     presetwindow.buttons = [entrybutton1var.get(), entrybutton2var.get(), entrybutton3var.get()]
     presetwindow.icon = int(selectedicon.get()[0])
-    presetwindow.os = selectedos.get()
+    presetwindow.os = OS(selectedos.get())
     presetwindow.startpos = (float(custompositionxvar.get()), float(custompositionyvar.get()), float(custompositionzvar.get()))
     presetwindow.startrotation = (float(customrotationxvar.get()), float(customrotationyvar.get()), float(customrotationzvar.get()))
     presetwindow.origin = (float(customoriginxvar.get()), float(customoriginyvar.get()), float(customoriginzvar.get()))
@@ -1897,12 +1907,13 @@ keyframes = []
 currentpreset = 0
 presets = [Window(
     text="Setup detected that the operating system in use is not\nWindows 2000 or XP. This setup program and its associated\ndrivers are designed to run only on Windows 2000 or XP. The\ninstallation will be terminated.",
-    buttons=["OK", "", ""], os="7", title="NVIDIA Setup Error"
+    buttons=["OK", "", ""], os=OS.WINDOWS_7, title="NVIDIA Setup Error"
     )]
 
 directionlist = ["00: 🡾", "10: 🡻", "20: 🡿", "01: 🡺", "11: ⭕", "21: 🡸", "02: 🡽", "12: 🡹", "22: 🡼"]
 
-oslist = ["7", "xp", "custom"]
+oslist = [OS.WINDOWS_7.value, OS.XP.value, OS.CUSTOM.value]
+oslist = [ops.value for ops in OS]
 iconlist = ["0: Critical Error", "1: Exclamation", "2: Information", "3: Question"]
 timelineroot = Tk()
 timelineroot.title("czeditor")
