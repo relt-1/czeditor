@@ -11,10 +11,7 @@ import os
 from base64 import *
 from tkinter.filedialog import *
 import pygame
-# import inspect
 import wavfile
-# import pprint
-# import palanteer
 import copy
 import numpy as np
 from scipy.spatial.transform import Rotation as R
@@ -1955,9 +1952,11 @@ presetcanvas = Frame(presetenclosingcavnas, bg="#1A1A1A")
 presetenclosingcavnas.create_window((0, 0), window=presetcanvas, anchor='nw')
 
 presetscrollbar.config(command=presetenclosingcavnas.yview)
-updatepresetview()
-# print([[i,presetscrollbar[i]] for i in presetscrollbar.keys()])
-presetenclosingcavnas.config(scrollregion=presetenclosingcavnas.bbox("all"))
+
+# print([[pi,presetscrollbar[pi]]]) 
+
+for i in presetscrollbar.keys():
+    presetenclosingcavnas.config(scrollregion=presetenclosingcavnas.bbox("all"))
 
 selectedos = StringVar()
 chooseerroros = OptionMenu(errorroot, selectedos, *oslist)
@@ -2056,8 +2055,8 @@ def getcustomimage():
     global currentcustomimg
     file = askopenfilename(filetypes=[("PNG image files", ".png")])
     currentcustomimg = file
-    # updatepresetview()
-    # print(currentcustomimg)
+    updatepresetview()
+    print(currentcustomimg)
 
 
 customimagebutton = Button(errorroot, text="browse image", command=getcustomimage, bg="#000000", fg="#FFFFFF", pady="-2p")
