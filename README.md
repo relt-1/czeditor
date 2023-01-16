@@ -1,3 +1,6 @@
+# Project has moved
+# https://github.com/CZEditor/CZEditor
+
 Fully functional Crazy Error Video editing software
 
 This application mainly targeted for old and lower hardware like core2 duo and pentium series.
